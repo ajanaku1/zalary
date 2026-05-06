@@ -122,6 +122,19 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       if (!program) {
         throw new Error('Wallet not connected to Solana program. Connect Phantom (or another Solana wallet that exposes signTransaction) and retry.')
       }
+
+      // If the org PDA for this authority already exists on-chain (from a prior
+      // attempt that succeeded but errored on the next step), skip create and
+      // continue. The program would reject the init anyway with "already in use".
+      const authority = program.provider.publicKey!
+      const [orgPda] = findOrganizationPda(authority)
+      const existing = await (program.account as any).organization.fetchNullable(orgPda)
+      if (existing) {
+        setTxSignature('existing_' + orgPda.toBase58().slice(0, 8))
+        setTimeout(() => goToStep(3), 600)
+        return
+      }
+
       const { tx } = await createOrgOnChain(program, orgName.trim(), USDC_MINT)
       setTxSignature(tx)
       setTimeout(() => goToStep(3), 800)

@@ -7,7 +7,7 @@ import { isValidSolanaAddress } from '../../lib/utils'
 import { useProgram } from '../../hooks/useProgram'
 import { createOrganization as createOrgOnChain, fundTreasury as fundTreasuryOnChain, findOrganizationPda } from '../../lib/program'
 
-const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
+const USDC_MINT = new PublicKey('2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv')
 
 interface OnboardingProps {
   onComplete: (data: {
@@ -161,6 +161,33 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [funding, setFunding] = useState(false)
   const [fundTx, setFundTx] = useState<string | null>(null)
   const [fundError, setFundError] = useState<string | null>(null)
+
+  // Test-zUSDC faucet — devnet-only
+  const [requestingFaucet, setRequestingFaucet] = useState(false)
+  const [faucetSig, setFaucetSig] = useState<string | null>(null)
+  const [faucetError, setFaucetError] = useState<string | null>(null)
+  const [faucetReceived, setFaucetReceived] = useState(0)
+
+  const handleRequestFaucet = useCallback(async () => {
+    if (!program?.provider.publicKey) {
+      setFaucetError('Connect your wallet first')
+      return
+    }
+    setRequestingFaucet(true)
+    setFaucetError(null)
+    try {
+      const wallet = program.provider.publicKey.toBase58()
+      const res = await fetch(`/api/faucet?wallet=${wallet}`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Faucet failed')
+      setFaucetSig(data.sig)
+      setFaucetReceived(prev => prev + (data.amount || 1000))
+    } catch (err: any) {
+      setFaucetError(err?.message || 'Faucet failed')
+    } finally {
+      setRequestingFaucet(false)
+    }
+  }, [program])
 
   const handleFund = useCallback(async () => {
     const amount = parseFloat(treasuryAmount)
@@ -587,9 +614,49 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px', marginBottom: 8 }}>
                 Fund your treasury
               </h2>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
                 Deposit USDC to your organization's vault. This is where payroll funds are drawn from.
               </p>
+
+              <div style={{
+                padding: '14px 16px',
+                background: 'rgba(108,92,231,0.06)',
+                border: '1px dashed rgba(108,92,231,0.3)',
+                borderRadius: 'var(--radius)',
+                marginBottom: 20,
+              }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                  No devnet zUSDC yet? Mint test tokens straight to your wallet — devnet only, 1000 zUSDC per click.
+                </div>
+                <button
+                  onClick={handleRequestFaucet}
+                  disabled={requestingFaucet || !program}
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--accent)',
+                    border: '1px solid var(--accent)',
+                    padding: '8px 14px',
+                    borderRadius: 'var(--radius)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: requestingFaucet || !program ? 'not-allowed' : 'pointer',
+                    opacity: requestingFaucet || !program ? 0.5 : 1,
+                  }}
+                >
+                  {requestingFaucet ? 'Minting…' : faucetReceived > 0 ? `Received ${faucetReceived} zUSDC — click for 1000 more` : 'Get 1000 test zUSDC'}
+                </button>
+                {faucetSig && (
+                  <a
+                    href={`https://solscan.io/tx/${faucetSig}?cluster=devnet`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'block', marginTop: 8, fontSize: 12, color: 'var(--accent)' }}
+                  >
+                    View mint tx: {faucetSig.slice(0, 8)}…{faucetSig.slice(-8)}
+                  </a>
+                )}
+                {faucetError && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--error)' }}>{faucetError}</div>}
+              </div>
 
               <div style={{ marginBottom: 20 }}>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>

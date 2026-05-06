@@ -16,7 +16,7 @@ import { AVATAR_COLORS, deriveInitials, truncateAddress } from '../../lib/utils'
 import type { Employee } from './EmployeeDetail'
 
 // Devnet USDC mint address
-const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
+const USDC_MINT = new PublicKey('2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv')
 
 const DEFAULT_EMPLOYEES: Employee[] = [
   { initials: 'AJ', name: 'Aisha Johnson', wallet: '7xKt...m4Fp', bg: 'var(--accent-subtle)', color: 'var(--accent)', dot: 'green' },

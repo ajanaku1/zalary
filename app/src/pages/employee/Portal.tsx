@@ -13,7 +13,7 @@ import { WORLD_ID_APP_ID, WORLD_ID_ACTION } from '../../lib/worldid'
 import { useProgram } from '../../hooks/useProgram'
 import { verifyWorldId as verifyWorldIdOnChain, findOrganizationPda, claimFunds as claimFundsOnChain } from '../../lib/program'
 
-const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
+const USDC_MINT = new PublicKey('2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv')
 
 export default function Portal() {
   const [selectedCurrency, setSelectedCurrency] = useState('USD')

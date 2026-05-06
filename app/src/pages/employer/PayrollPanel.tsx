@@ -5,7 +5,7 @@ import { getAssociatedTokenAddressSync } from '@solana/spl-token'
 import { useProgram } from '../../hooks/useProgram'
 import { findOrganizationPda, runPayroll as runPayrollOnChain } from '../../lib/program'
 
-const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
+const USDC_MINT = new PublicKey('2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv')
 
 interface PayrollEmployee {
   initials: string

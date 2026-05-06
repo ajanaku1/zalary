@@ -109,16 +109,16 @@ export default function Landing() {
               <div className="zigzag-card">
                 <div className="employee-cards">
                   <div className="employee-mini">
-                    <div className="avatar-xs" style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}>AJ</div>
-                    <div className="info">Aisha J.<br/><span className="addr-small">7xKt...m4Fp</span></div>
+                    <div className="avatar-xs" style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}>LG</div>
+                    <div className="info">Lagos engineer<br/><span className="addr-small">7xKt...m4Fp</span></div>
                   </div>
                   <div className="employee-mini">
-                    <div className="avatar-xs" style={{ background: 'var(--accent-warm-subtle)', color: 'var(--accent-warm)' }}>MR</div>
-                    <div className="info">Marcus R.<br/><span className="addr-small">3vBn...q9Xz</span></div>
+                    <div className="avatar-xs" style={{ background: 'var(--accent-warm-subtle)', color: 'var(--accent-warm)' }}>SP</div>
+                    <div className="info">São Paulo PM<br/><span className="addr-small">3vBn...q9Xz</span></div>
                   </div>
                   <div className="employee-mini">
-                    <div className="avatar-xs" style={{ background: 'rgba(0,184,148,0.12)', color: 'var(--success)' }}>LP</div>
-                    <div className="info">Lena P.<br/><span className="addr-small">9aHk...w2Ty</span></div>
+                    <div className="avatar-xs" style={{ background: 'rgba(0,184,148,0.12)', color: 'var(--success)' }}>MB</div>
+                    <div className="info">Mumbai designer<br/><span className="addr-small">9aHk...w2Ty</span></div>
                   </div>
                 </div>
               </div>
@@ -135,9 +135,9 @@ export default function Landing() {
               <div className="zigzag-card">
                 <div className="blurred-amounts">
                   {[
-                    { name: 'Aisha J.', amount: '$8,500.00' },
-                    { name: 'Marcus R.', amount: '$12,000.00' },
-                    { name: 'Lena P.', amount: '$9,200.00' },
+                    { name: 'Lagos engineer', amount: '$8,500.00' },
+                    { name: 'São Paulo PM', amount: '$12,000.00' },
+                    { name: 'Mumbai designer', amount: '$9,200.00' },
                   ].map((row) => (
                     <div className="blurred-row" key={row.name}>
                       <span>{row.name}</span>

@@ -157,7 +157,7 @@ export default function TopNav({ variant, activeTab = 'dashboard', onTabChange, 
             <span className="addr mono">Connect Wallet</span>
           </button>
         )}
-        <div className="avatar-sm" title={privyDisplayName || 'Aisha Johnson'}>{avatarInitials}</div>
+        <div className="avatar-sm" title={privyDisplayName || 'Account'}>{avatarInitials}</div>
       </div>
     </nav>
   )

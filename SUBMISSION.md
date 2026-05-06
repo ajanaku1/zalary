@@ -110,7 +110,7 @@ cd app && npm install && npm run dev
 Needs:
 - Phantom wallet on devnet
 - Devnet SOL (airdrop 2 SOL to start)
-- Devnet USDC from spl-token-faucet.com
+- The "Get 1000 test zUSDC" button on the Fund Treasury onboarding step mints test tokens straight to your wallet
 
 Go to `localhost:5173`. Hit "I'm an Employer", complete the onboarding, fund the treasury, then open a second browser tab as `/employee` and connect a different wallet to see the employee side.
 

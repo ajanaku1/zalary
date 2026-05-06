@@ -24,11 +24,12 @@ async function sendTx(program: ZalaryProgram, tx: Transaction): Promise<string> 
   const rawTx = signed.serialize()
 
   // Run a real preflight simulation so program errors (insufficient funds, unauthorized,
-  // PDA mismatch) surface before we burn fees and start polling.
-  const sim = await connection.simulateTransaction(signed, { commitment: 'confirmed', sigVerify: false })
-  if (sim.value.err) {
-    const logs = sim.value.logs ?? []
-    const programError = logs.find(l => l.includes('Error:') || l.includes('failed:'))
+  // PDA mismatch) surface before we burn fees and start polling. Cast through any to
+  // hit the legacy Transaction overload — the typed signatures only accept VersionedTx.
+  const sim = await (connection as any).simulateTransaction(signed)
+  if (sim?.value?.err) {
+    const logs: string[] = sim.value.logs ?? []
+    const programError = logs.find((l: string) => l.includes('Error:') || l.includes('failed:'))
     throw new Error(programError || `Simulation failed: ${JSON.stringify(sim.value.err)}`)
   }
 

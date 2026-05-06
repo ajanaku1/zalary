@@ -10,7 +10,7 @@ import AuthGate from './AuthGate'
 import Onboarding from './Onboarding'
 import { useRole } from '../../contexts/RoleContext'
 import { useProgram } from '../../hooks/useProgram'
-import { createOrganization, addEmployee, findOrganizationPda, findTreasuryPda } from '../../lib/program'
+import { createOrganization, addEmployee, closeOrganization as closeOrganizationOnChain, findOrganizationPda, findTreasuryPda } from '../../lib/program'
 import { encryptSalary } from '../../lib/arcium'
 import { AVATAR_COLORS, deriveInitials, truncateAddress } from '../../lib/utils'
 import type { Employee } from './EmployeeDetail'
@@ -73,6 +73,35 @@ export default function Dashboard() {
   const [txSignature, setTxSignature] = useState<string | null>(null)
   const [orgError, setOrgError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
+  const [confirmReset, setConfirmReset] = useState(false)
+
+  const handleResetOrg = useCallback(async () => {
+    if (!program) {
+      setResetError('Wallet not connected')
+      return
+    }
+    setResetting(true)
+    setResetError(null)
+    try {
+      const authority = program.provider.publicKey!
+      const [orgPda] = findOrganizationPda(authority)
+      await closeOrganizationOnChain(program, orgPda)
+      localStorage.removeItem('zalary_onboarded')
+      localStorage.removeItem('zalary_org_data')
+      localStorage.removeItem('zalary_org_authority')
+      window.location.reload()
+    } catch (err: any) {
+      const msg = err?.message || 'Reset failed'
+      setResetError(
+        msg.includes('NotEmpty') || msg.includes('non-zero')
+          ? 'Treasury still holds tokens. Withdraw them first, then retry reset.'
+          : msg,
+      )
+      setResetting(false)
+    }
+  }, [program])
 
   const handleOnboardingComplete = useCallback(async (data: OrgData) => {
     localStorage.setItem('zalary_onboarded', 'true')
@@ -618,6 +647,40 @@ export default function Dashboard() {
           </div>
         </div>
         )}
+
+        {/* Danger zone — devnet reset */}
+        <div style={{ maxWidth: 720, margin: '40px auto 24px', padding: '16px 20px', border: '1px dashed var(--error)', borderRadius: 'var(--radius)', background: 'rgba(255,107,107,0.04)' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--error)', marginBottom: 6 }}>Danger zone</div>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.6 }}>
+            Close this organization on-chain and reset local state. The treasury must be empty (0 balance) — withdraw any remaining funds first. Used during devnet iteration when the treasury is bound to an old mint.
+          </p>
+          {!confirmReset ? (
+            <button
+              onClick={() => setConfirmReset(true)}
+              style={{ background: 'transparent', color: 'var(--error)', border: '1px solid var(--error)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Reset organization
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleResetOrg}
+                disabled={resetting}
+                style={{ background: 'var(--error)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: resetting ? 'wait' : 'pointer', opacity: resetting ? 0.6 : 1 }}
+              >
+                {resetting ? 'Closing on-chain…' : 'Yes, reset'}
+              </button>
+              <button
+                onClick={() => setConfirmReset(false)}
+                disabled={resetting}
+                style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {resetError && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{resetError}</div>}
+        </div>
       </main>
 
       <PayrollPanel open={payrollPanelOpen} onClose={closePayrollPanel} employees={employees} onPayrollComplete={handlePayrollComplete} />

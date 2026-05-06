@@ -226,6 +226,30 @@ pub mod zalary {
         Ok(())
     }
 
+    /// Close the organization and its treasury, refunding all rent to the authority.
+    /// Treasury must be empty — call `withdraw_treasury` first if there's a balance.
+    pub fn close_organization(ctx: Context<CloseOrganization>) -> Result<()> {
+        let org = &ctx.accounts.organization;
+        let org_key = org.authority.key();
+        let seeds = &[b"org".as_ref(), org_key.as_ref(), &[org.bump]];
+        let signer_seeds = &[&seeds[..]];
+
+        // close_account requires the token account to be empty (token program enforces this)
+        let close_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::CloseAccount {
+                account: ctx.accounts.treasury.to_account_info(),
+                destination: ctx.accounts.authority.to_account_info(),
+                authority: ctx.accounts.organization.to_account_info(),
+            },
+            signer_seeds,
+        );
+        token::close_account(close_ctx)?;
+
+        msg!("Organization closed: {}", org.name);
+        Ok(())
+    }
+
     /// Owner-only withdrawal from treasury.
     pub fn withdraw_treasury(ctx: Context<WithdrawTreasury>, amount: u64) -> Result<()> {
         require!(amount > 0, ZalaryError::InvalidAmount);
@@ -500,6 +524,31 @@ pub struct VerifyWorldId<'info> {
     pub employee: Account<'info, Employee>,
 
     pub claimer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct CloseOrganization<'info> {
+    #[account(
+        mut,
+        close = authority,
+        seeds = [b"org", authority.key().as_ref()],
+        bump = organization.bump,
+        has_one = authority,
+        has_one = treasury,
+    )]
+    pub organization: Account<'info, Organization>,
+
+    #[account(
+        mut,
+        seeds = [b"treasury", organization.key().as_ref()],
+        bump,
+    )]
+    pub treasury: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]

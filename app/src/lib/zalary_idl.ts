@@ -104,6 +104,17 @@ export const IDL = {
       args: [{ name: "nullifierHash", type: { array: ["u8", 32] } }],
     },
     {
+      name: "closeOrganization",
+      discriminator: [223,179,142,148,80,216,32,61],
+      accounts: [
+        { name: "organization", writable: true },
+        { name: "treasury", writable: true },
+        { name: "authority", writable: true, signer: true },
+        { name: "tokenProgram" },
+      ],
+      args: [],
+    },
+    {
       name: "withdrawTreasury",
       discriminator: [40,63,122,158,144,216,83,96],
       accounts: [

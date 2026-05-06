@@ -251,6 +251,25 @@ export async function verifyWorldId(
   return { tx: await sendTx(program, tx) }
 }
 
+export async function closeOrganization(
+  program: ZalaryProgram,
+  orgPda: PublicKey,
+) {
+  const authority = program.provider.publicKey!
+  const [treasuryPda] = findTreasuryPda(orgPda)
+
+  const tx = await (program.methods as any)
+    .closeOrganization()
+    .accounts({
+      organization: orgPda,
+      treasury: treasuryPda,
+      authority,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .transaction()
+  return { tx: await sendTx(program, tx) }
+}
+
 export async function withdrawTreasury(
   program: ZalaryProgram,
   orgPda: PublicKey,

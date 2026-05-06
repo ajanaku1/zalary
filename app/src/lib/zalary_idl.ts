@@ -81,6 +81,27 @@ export const IDL = {
       args: [{ name: "amount", type: "u64" }],
     },
     {
+      name: "setAuditor",
+      discriminator: [90,12,154,66,85,118,8,107],
+      accounts: [
+        { name: "organization" },
+        { name: "auditor", writable: true },
+        { name: "authority", writable: true, signer: true },
+        { name: "systemProgram" },
+      ],
+      args: [{ name: "auditor", type: "pubkey" }],
+    },
+    {
+      name: "clearAuditor",
+      discriminator: [101,76,104,177,40,11,216,136],
+      accounts: [
+        { name: "organization" },
+        { name: "auditor", writable: true },
+        { name: "authority", writable: true, signer: true },
+      ],
+      args: [],
+    },
+    {
       name: "pauseOrganization",
       discriminator: [157,149,174,224,109,150,45,144],
       accounts: [
@@ -154,6 +175,7 @@ export const IDL = {
     { name: "Organization", discriminator: [145,38,152,251,91,57,118,160] },
     { name: "Employee", discriminator: [98,238,61,252,130,77,105,67] },
     { name: "PayrollRun", discriminator: [11,197,215,124,64,255,82,248] },
+    { name: "OrgAuditor", discriminator: [148,227,193,218,102,146,114,212] },
   ],
   types: [
     {
@@ -209,6 +231,16 @@ export const IDL = {
       type: {
         kind: "enum",
         variants: [{ name: "Active" }, { name: "Pending" }, { name: "Inactive" }],
+      },
+    },
+    {
+      name: "OrgAuditor",
+      type: {
+        kind: "struct",
+        fields: [
+          { name: "auditor", type: "pubkey" },
+          { name: "setAt", type: "i64" },
+        ],
       },
     },
     {

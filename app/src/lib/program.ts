@@ -140,6 +140,13 @@ export function findPayrollRunPda(
   )
 }
 
+export function findAuditorPda(organizationPda: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('auditor'), organizationPda.toBuffer()],
+    PROGRAM_ID,
+  )
+}
+
 export function findPausePda(organizationPda: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('pause'), organizationPda.toBuffer()],
@@ -298,6 +305,46 @@ export async function verifyWorldId(
     })
     .transaction()
   return { tx: await sendTx(program, tx) }
+}
+
+export async function setAuditor(program: ZalaryProgram, orgPda: PublicKey, auditor: PublicKey) {
+  const authority = program.provider.publicKey!
+  const [auditorPda] = findAuditorPda(orgPda)
+  const tx = await (program.methods as any)
+    .setAuditor(auditor)
+    .accounts({
+      organization: orgPda,
+      auditor: auditorPda,
+      authority,
+      systemProgram: SystemProgram.programId,
+    })
+    .transaction()
+  return { tx: await sendTx(program, tx) }
+}
+
+export async function clearAuditor(program: ZalaryProgram, orgPda: PublicKey) {
+  const authority = program.provider.publicKey!
+  const [auditorPda] = findAuditorPda(orgPda)
+  const tx = await (program.methods as any)
+    .clearAuditor()
+    .accounts({
+      organization: orgPda,
+      auditor: auditorPda,
+      authority,
+    })
+    .transaction()
+  return { tx: await sendTx(program, tx) }
+}
+
+export async function getAuditor(program: ZalaryProgram, orgPda: PublicKey): Promise<{ auditor: PublicKey; setAt: number } | null> {
+  const [auditorPda] = findAuditorPda(orgPda)
+  try {
+    const acct = await (program.account as any).orgAuditor.fetchNullable(auditorPda)
+    if (!acct) return null
+    return { auditor: acct.auditor as PublicKey, setAt: Number(acct.setAt.toString()) }
+  } catch {
+    return null
+  }
 }
 
 export async function pauseOrganization(program: ZalaryProgram, orgPda: PublicKey) {

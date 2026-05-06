@@ -46,6 +46,18 @@ pub struct PayrollRun {
 #[derive(InitSpace)]
 pub struct OrgPause {}
 
+/// Designated auditor / viewing key for the org. Compliance primitive: the
+/// authority can name a third party (tax authority, internal audit, regulator)
+/// who would receive selective-disclosure decryption rights when the Token-2022
+/// ConfidentialTransfer auditor-key wiring is enabled. Lives at
+/// ["auditor", org_pda].
+#[account]
+#[derive(InitSpace)]
+pub struct OrgAuditor {
+    pub auditor: Pubkey,
+    pub set_at: i64,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, InitSpace)]
 pub enum EmployeeStatus {
     Active,

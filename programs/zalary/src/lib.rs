@@ -238,6 +238,23 @@ pub mod zalary {
         Ok(())
     }
 
+    /// Set or update the org's auditor / viewing-key pubkey. Only the org
+    /// authority can call this. The auditor PDA, once initialized, can have its
+    /// auditor field updated in-place (no close required).
+    pub fn set_auditor(ctx: Context<SetAuditor>, auditor: Pubkey) -> Result<()> {
+        let acct = &mut ctx.accounts.auditor;
+        acct.auditor = auditor;
+        acct.set_at = Clock::get()?.unix_timestamp;
+        msg!("Auditor set: {}", auditor);
+        Ok(())
+    }
+
+    /// Clear the auditor designation by closing the PDA. Returns rent to authority.
+    pub fn clear_auditor(_ctx: Context<ClearAuditor>) -> Result<()> {
+        msg!("Auditor cleared");
+        Ok(())
+    }
+
     /// Pause all payroll operations for this organization. Useful for incident
     /// response, compliance holds, or M&A freezes. Run_payroll will reject while
     /// paused. Implemented as a separate PDA so existing orgs upgrade without
@@ -512,6 +529,51 @@ pub struct RunPayroll<'info> {
 
     pub system_program: Program<'info, System>,
     pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct SetAuditor<'info> {
+    #[account(
+        seeds = [b"org", authority.key().as_ref()],
+        bump = organization.bump,
+        has_one = authority,
+    )]
+    pub organization: Account<'info, Organization>,
+
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = 8 + OrgAuditor::INIT_SPACE,
+        seeds = [b"auditor", organization.key().as_ref()],
+        bump,
+    )]
+    pub auditor: Account<'info, OrgAuditor>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ClearAuditor<'info> {
+    #[account(
+        seeds = [b"org", authority.key().as_ref()],
+        bump = organization.bump,
+        has_one = authority,
+    )]
+    pub organization: Account<'info, Organization>,
+
+    #[account(
+        mut,
+        close = authority,
+        seeds = [b"auditor", organization.key().as_ref()],
+        bump,
+    )]
+    pub auditor: Account<'info, OrgAuditor>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]

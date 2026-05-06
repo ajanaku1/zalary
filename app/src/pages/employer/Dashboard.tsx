@@ -10,7 +10,7 @@ import AuthGate from './AuthGate'
 import Onboarding from './Onboarding'
 import { useRole } from '../../contexts/RoleContext'
 import { useProgram } from '../../hooks/useProgram'
-import { createOrganization, addEmployee, closeOrganization as closeOrganizationOnChain, pauseOrganization as pauseOrganizationOnChain, resumeOrganization as resumeOrganizationOnChain, isOrganizationPaused, findOrganizationPda, findTreasuryPda } from '../../lib/program'
+import { createOrganization, addEmployee, closeOrganization as closeOrganizationOnChain, pauseOrganization as pauseOrganizationOnChain, resumeOrganization as resumeOrganizationOnChain, isOrganizationPaused, setAuditor as setAuditorOnChain, clearAuditor as clearAuditorOnChain, getAuditor, findOrganizationPda, findTreasuryPda } from '../../lib/program'
 import { encryptSalary } from '../../lib/salary_crypto'
 import { AVATAR_COLORS, deriveInitials, truncateAddress } from '../../lib/utils'
 import type { Employee } from './EmployeeDetail'
@@ -72,6 +72,61 @@ export default function Dashboard() {
   const [paused, setPaused] = useState<boolean | null>(null)
   const [pauseToggling, setPauseToggling] = useState(false)
   const [pauseError, setPauseError] = useState<string | null>(null)
+
+  // Auditor / viewing key (compliance primitive)
+  const [auditorPubkey, setAuditorPubkey] = useState<string | null>(null)
+  const [auditorSetAt, setAuditorSetAt] = useState<number | null>(null)
+  const [auditorInput, setAuditorInput] = useState('')
+  const [auditorBusy, setAuditorBusy] = useState(false)
+  const [auditorError, setAuditorError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!program || !walletPublicKey) return
+    const [orgPda] = findOrganizationPda(walletPublicKey)
+    getAuditor(program, orgPda).then((a) => {
+      if (a) {
+        setAuditorPubkey(a.auditor.toBase58())
+        setAuditorSetAt(a.setAt)
+      } else {
+        setAuditorPubkey(null)
+        setAuditorSetAt(null)
+      }
+    })
+  }, [program, walletPublicKey])
+
+  const handleSetAuditor = useCallback(async () => {
+    if (!program || !walletPublicKey) return
+    const trimmed = auditorInput.trim()
+    if (!trimmed) { setAuditorError('Enter an auditor wallet address'); return }
+    setAuditorBusy(true); setAuditorError(null)
+    try {
+      const auditor = new PublicKey(trimmed)
+      const [orgPda] = findOrganizationPda(walletPublicKey)
+      await setAuditorOnChain(program, orgPda, auditor)
+      setAuditorPubkey(auditor.toBase58())
+      setAuditorSetAt(Math.floor(Date.now() / 1000))
+      setAuditorInput('')
+    } catch (err: any) {
+      setAuditorError(err?.message || 'Failed to set auditor')
+    } finally {
+      setAuditorBusy(false)
+    }
+  }, [program, walletPublicKey, auditorInput])
+
+  const handleClearAuditor = useCallback(async () => {
+    if (!program || !walletPublicKey) return
+    setAuditorBusy(true); setAuditorError(null)
+    try {
+      const [orgPda] = findOrganizationPda(walletPublicKey)
+      await clearAuditorOnChain(program, orgPda)
+      setAuditorPubkey(null)
+      setAuditorSetAt(null)
+    } catch (err: any) {
+      setAuditorError(err?.message || 'Failed to clear auditor')
+    } finally {
+      setAuditorBusy(false)
+    }
+  }, [program, walletPublicKey])
 
   // Poll pause state on load
   useEffect(() => {
@@ -700,6 +755,54 @@ export default function Dashboard() {
           </div>
         </div>
         )}
+
+        {/* Auditor / viewing key — compliance primitive */}
+        <div style={{ maxWidth: 720, margin: '40px auto 16px', padding: '16px 20px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-elevated)' }}>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Auditor / viewing key</div>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+              Designate a third-party wallet (tax authority, internal audit, regulator) for selective-disclosure access. When the Token-2022 ConfidentialTransfer wiring lands, this address is what the mint's auditor key will be set to — letting compliance read encrypted balances without exposing them to the public.
+            </p>
+          </div>
+          {auditorPubkey ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+              <div style={{ minWidth: 0 }}>
+                <div className="mono" style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{auditorPubkey}</div>
+                {auditorSetAt && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Set {new Date(auditorSetAt * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleClearAuditor}
+                disabled={auditorBusy}
+                style={{ background: 'transparent', color: 'var(--error)', border: '1px solid var(--error)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: auditorBusy ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}
+              >
+                {auditorBusy ? '…' : 'Clear'}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                placeholder="Auditor wallet address"
+                value={auditorInput}
+                onChange={(e) => setAuditorInput(e.target.value)}
+                disabled={auditorBusy}
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-card)', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)' }}
+              />
+              <button
+                onClick={handleSetAuditor}
+                disabled={auditorBusy || !program}
+                style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: auditorBusy || !program ? 'wait' : 'pointer', opacity: auditorBusy || !program ? 0.6 : 1 }}
+              >
+                {auditorBusy ? 'Setting…' : 'Set auditor'}
+              </button>
+            </div>
+          )}
+          {auditorError && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{auditorError}</div>}
+        </div>
 
         {/* Pause / Resume — on-chain payroll kill switch */}
         <div style={{ maxWidth: 720, margin: '40px auto 16px', padding: '16px 20px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-elevated)' }}>

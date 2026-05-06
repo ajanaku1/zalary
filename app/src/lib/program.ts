@@ -32,26 +32,46 @@ export function getProgram(provider: AnchorProvider): ZalaryProgram {
 async function sendTx(program: ZalaryProgram, tx: Transaction): Promise<string> {
   const provider = program.provider as AnchorProvider
   const connection = provider.connection
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
-  tx.recentBlockhash = blockhash
   tx.feePayer = provider.publicKey!
-  const signed = await provider.wallet.signTransaction(tx)
-  const rawTx = signed.serialize()
 
-  // Send WITH preflight — the RPC runs simulation server-side and returns a clean
-  // SendTransactionError with logs before we ever poll. This is what surfaces
-  // program errors (insufficient funds, unauthorized, PDA mismatch).
-  let sig: string
-  try {
-    sig = await connection.sendRawTransaction(rawTx, {
+  // signWithFreshBlockhash + send. Wrapped in retry to handle "Blockhash not
+  // found" — the public devnet RPC pool sometimes serves a blockhash from one
+  // node that another node hasn't seen yet during preflight. Retrying with a
+  // freshly-fetched blockhash from the same RPC almost always resolves it.
+  const signAndSend = async (): Promise<{ sig: string; lastValidBlockHeight: number }> => {
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized')
+    tx.recentBlockhash = blockhash
+    tx.signatures = [] // reset any prior signature from a failed attempt
+    const signed = await provider.wallet.signTransaction(tx)
+    const rawTx = signed.serialize()
+    const sig = await connection.sendRawTransaction(rawTx, {
       skipPreflight: false,
       preflightCommitment: 'confirmed',
       maxRetries: 5,
     })
+    return { sig, lastValidBlockHeight }
+  }
+
+  let sig: string
+  let lastValidBlockHeight: number
+  try {
+    ({ sig, lastValidBlockHeight } = await signAndSend())
   } catch (err: any) {
-    const logs = err?.logs?.join('\n') || ''
-    const programError = logs.match(/Program log: Error:.*$/m)?.[0] || err?.message || 'Send failed'
-    throw new Error(programError)
+    const msg = err?.message || ''
+    if (msg.includes('Blockhash not found') || msg.includes('blockhash')) {
+      console.warn('Blockhash not found on first try, refetching and retrying once...')
+      try {
+        ({ sig, lastValidBlockHeight } = await signAndSend())
+      } catch (err2: any) {
+        const logs = err2?.logs?.join('\n') || ''
+        const programError = logs.match(/Program log: Error:.*$/m)?.[0] || err2?.message || 'Send failed'
+        throw new Error(programError)
+      }
+    } else {
+      const logs = err?.logs?.join('\n') || ''
+      const programError = logs.match(/Program log: Error:.*$/m)?.[0] || msg || 'Send failed'
+      throw new Error(programError)
+    }
   }
 
   console.log('Tx sent, polling for confirmation:', sig)

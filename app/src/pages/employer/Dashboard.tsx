@@ -18,14 +18,7 @@ import type { Employee } from './EmployeeDetail'
 // Devnet USDC mint address
 const USDC_MINT = new PublicKey('2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv')
 
-const DEFAULT_EMPLOYEES: Employee[] = [
-  { initials: 'AJ', name: 'Aisha Johnson', wallet: '7xKt...m4Fp', bg: 'var(--accent-subtle)', color: 'var(--accent)', dot: 'green' },
-  { initials: 'MR', name: 'Marcus Rivera', wallet: '3vBn...q9Xz', bg: 'var(--accent-warm-subtle)', color: 'var(--accent-warm)', dot: 'green' },
-  { initials: 'LP', name: 'Lena Petrov', wallet: '9aHk...w2Ty', bg: 'rgba(0,184,148,0.12)', color: 'var(--success)', dot: 'green' },
-  { initials: 'TN', name: 'Tomas Nguyen', wallet: '5pWc...k8Rz', bg: 'rgba(253,203,110,0.12)', color: 'var(--warning)', dot: 'yellow' },
-  { initials: 'SK', name: 'Sarah Kim', wallet: '2mFg...h7Qp', bg: 'rgba(255,107,107,0.12)', color: 'var(--error)', dot: 'green' },
-  { initials: 'DA', name: 'David Adeyemi', wallet: '8nJx...v3Ld', bg: 'var(--accent-subtle)', color: 'var(--accent)', dot: 'green' },
-]
+const DEFAULT_EMPLOYEES: Employee[] = []
 
 interface OrgData {
   orgName: string

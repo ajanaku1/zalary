@@ -65,7 +65,7 @@ export async function createOrganization(
       tokenProgram: TOKEN_PROGRAM_ID,
       rent: SYSVAR_RENT_PUBKEY,
     })
-    .rpc()
+    .rpc({ skipPreflight: true, commitment: 'confirmed' })
 
   return { tx, organizationPda, treasuryPda }
 }
@@ -87,7 +87,7 @@ export async function addEmployee(
       authority,
       systemProgram: SystemProgram.programId,
     })
-    .rpc()
+    .rpc({ skipPreflight: true, commitment: 'confirmed' })
 
   return { tx, employeePda }
 }
@@ -112,7 +112,7 @@ export async function fundTreasury(
       funder,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .rpc()
+    .rpc({ skipPreflight: true, commitment: 'confirmed' })
 
   return { tx }
 }
@@ -144,7 +144,7 @@ export async function runPayroll(
       systemProgram: SystemProgram.programId,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .rpc()
+    .rpc({ skipPreflight: true, commitment: 'confirmed' })
 
   return { tx, payrollRunPda }
 }
@@ -164,7 +164,7 @@ export async function verifyWorldId(
       employee: employeePda,
       claimer,
     })
-    .rpc()
+    .rpc({ skipPreflight: true, commitment: 'confirmed' })
 
   return { tx }
 }
@@ -189,7 +189,7 @@ export async function withdrawTreasury(
       authority,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .rpc()
+    .rpc({ skipPreflight: true, commitment: 'confirmed' })
 
   return { tx }
 }
@@ -210,7 +210,7 @@ export async function updateSalary(
       employee: employeePda,
       authority,
     })
-    .rpc()
+    .rpc({ skipPreflight: true, commitment: 'confirmed' })
 
   return { tx }
 }
@@ -237,7 +237,7 @@ export async function claimFunds(
       claimer,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .rpc()
+    .rpc({ skipPreflight: true, commitment: 'confirmed' })
 
   return { tx }
 }

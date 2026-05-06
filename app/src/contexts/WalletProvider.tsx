@@ -12,7 +12,10 @@ interface Props {
 
 export default function WalletProvider({ children }: Props) {
   return (
-    <ConnectionProvider endpoint={connection.rpcEndpoint}>
+    <ConnectionProvider
+      endpoint={connection.rpcEndpoint}
+      config={{ commitment: 'confirmed', confirmTransactionInitialTimeout: 120_000 }}
+    >
       <SolanaWalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>
           {children}

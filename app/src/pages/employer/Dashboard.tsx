@@ -453,7 +453,7 @@ export default function Dashboard() {
 
         {activeTab === 'dashboard' && (
         <div className="dashboard-layout">
-          <div className="dash-main">
+          <div className="dash-main" data-tab="dashboard">
             <div className="welcome-banner">
               <p>Good morning. You have a payroll run scheduled for <span className="mono-detail">{nextPayDate}</span>.</p>
             </div>
@@ -496,6 +496,78 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Compliance + safety controls — directly below team members on dashboard */}
+            <div style={{ marginTop: 32, padding: '16px 20px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-elevated)' }}>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Auditor / viewing key</div>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                  Designate a third-party wallet (tax authority, internal audit, regulator) for selective-disclosure access. When the Token-2022 ConfidentialTransfer wiring lands, this address is what the mint's auditor key will be set to.
+                </p>
+              </div>
+              {auditorPubkey ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="mono" style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{auditorPubkey}</div>
+                    {auditorSetAt && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                        Set {new Date(auditorSetAt * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={handleClearAuditor} disabled={auditorBusy} style={{ background: 'transparent', color: 'var(--error)', border: '1px solid var(--error)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: auditorBusy ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
+                    {auditorBusy ? '…' : 'Clear'}
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="text" placeholder="Auditor wallet address" value={auditorInput} onChange={(e) => setAuditorInput(e.target.value)} disabled={auditorBusy} style={{ flex: 1, padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-card)', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)' }} />
+                  <button onClick={handleSetAuditor} disabled={auditorBusy || !program} style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: auditorBusy || !program ? 'wait' : 'pointer', opacity: auditorBusy || !program ? 0.6 : 1 }}>
+                    {auditorBusy ? 'Setting…' : 'Set auditor'}
+                  </button>
+                </div>
+              )}
+              {auditorError && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{auditorError}</div>}
+            </div>
+
+            <div style={{ marginTop: 12, padding: '16px 20px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-elevated)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                    Payroll status: <span style={{ color: paused ? 'var(--warning)' : 'var(--success)' }}>{paused === null ? 'Loading…' : paused ? 'Paused' : 'Active'}</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                    On-chain kill switch. While paused, run_payroll rejects with OrganizationPaused (6009).
+                  </p>
+                </div>
+                <button onClick={handleTogglePause} disabled={pauseToggling || !program} style={{ background: paused ? 'var(--success)' : 'var(--warning)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 'var(--radius)', fontSize: 13, fontWeight: 600, cursor: pauseToggling || !program ? 'wait' : 'pointer', opacity: pauseToggling || !program ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                  {pauseToggling ? 'Working…' : paused ? 'Resume payroll' : 'Pause payroll'}
+                </button>
+              </div>
+              {pauseError && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{pauseError}</div>}
+            </div>
+
+            <div style={{ marginTop: 12, padding: '16px 20px', border: '1px dashed var(--error)', borderRadius: 'var(--radius)', background: 'rgba(255,107,107,0.04)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--error)', marginBottom: 6 }}>Danger zone</div>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.6 }}>
+                Close this organization on-chain and reset local state. The treasury must be empty (0 balance).
+              </p>
+              {!confirmReset ? (
+                <button onClick={() => setConfirmReset(true)} style={{ background: 'transparent', color: 'var(--error)', border: '1px solid var(--error)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  Reset organization
+                </button>
+              ) : (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={handleResetOrg} disabled={resetting} style={{ background: 'var(--error)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: resetting ? 'wait' : 'pointer', opacity: resetting ? 0.6 : 1 }}>
+                    {resetting ? 'Closing on-chain…' : 'Yes, reset'}
+                  </button>
+                  <button onClick={() => setConfirmReset(false)} disabled={resetting} style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                </div>
+              )}
+              {resetError && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{resetError}</div>}
             </div>
           </div>
           <div className="dash-side">
@@ -756,128 +828,6 @@ export default function Dashboard() {
         </div>
         )}
 
-        {/* Compliance + safety controls — only relevant on the Team tab */}
-        {activeTab === 'team' && (
-        <>
-        {/* Auditor / viewing key — compliance primitive */}
-        <div style={{ maxWidth: 720, margin: '40px auto 16px', padding: '16px 20px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-elevated)' }}>
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Auditor / viewing key</div>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-              Designate a third-party wallet (tax authority, internal audit, regulator) for selective-disclosure access. When the Token-2022 ConfidentialTransfer wiring lands, this address is what the mint's auditor key will be set to — letting compliance read encrypted balances without exposing them to the public.
-            </p>
-          </div>
-          {auditorPubkey ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
-              <div style={{ minWidth: 0 }}>
-                <div className="mono" style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{auditorPubkey}</div>
-                {auditorSetAt && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                    Set {new Date(auditorSetAt * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={handleClearAuditor}
-                disabled={auditorBusy}
-                style={{ background: 'transparent', color: 'var(--error)', border: '1px solid var(--error)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: auditorBusy ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}
-              >
-                {auditorBusy ? '…' : 'Clear'}
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="text"
-                placeholder="Auditor wallet address"
-                value={auditorInput}
-                onChange={(e) => setAuditorInput(e.target.value)}
-                disabled={auditorBusy}
-                style={{ flex: 1, padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-card)', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)' }}
-              />
-              <button
-                onClick={handleSetAuditor}
-                disabled={auditorBusy || !program}
-                style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: auditorBusy || !program ? 'wait' : 'pointer', opacity: auditorBusy || !program ? 0.6 : 1 }}
-              >
-                {auditorBusy ? 'Setting…' : 'Set auditor'}
-              </button>
-            </div>
-          )}
-          {auditorError && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{auditorError}</div>}
-        </div>
-
-        {/* Pause / Resume — on-chain payroll kill switch */}
-        <div style={{ maxWidth: 720, margin: '40px auto 16px', padding: '16px 20px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-elevated)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-                Payroll status:{' '}
-                <span style={{ color: paused ? 'var(--warning)' : 'var(--success)' }}>
-                  {paused === null ? 'Loading…' : paused ? 'Paused' : 'Active'}
-                </span>
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                On-chain kill switch. While paused, run_payroll rejects with OrganizationPaused (6009). Useful for incident response, M&A freezes, or compliance holds.
-              </p>
-            </div>
-            <button
-              onClick={handleTogglePause}
-              disabled={pauseToggling || !program}
-              style={{
-                background: paused ? 'var(--success)' : 'var(--warning)',
-                color: '#fff',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: 'var(--radius)',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: pauseToggling || !program ? 'wait' : 'pointer',
-                opacity: pauseToggling || !program ? 0.6 : 1,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {pauseToggling ? 'Working…' : paused ? 'Resume payroll' : 'Pause payroll'}
-            </button>
-          </div>
-          {pauseError && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{pauseError}</div>}
-        </div>
-
-        {/* Danger zone — devnet reset */}
-        <div style={{ maxWidth: 720, margin: '0 auto 24px', padding: '16px 20px', border: '1px dashed var(--error)', borderRadius: 'var(--radius)', background: 'rgba(255,107,107,0.04)' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--error)', marginBottom: 6 }}>Danger zone</div>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.6 }}>
-            Close this organization on-chain and reset local state. The treasury must be empty (0 balance) — withdraw any remaining funds first. Used during devnet iteration when the treasury is bound to an old mint.
-          </p>
-          {!confirmReset ? (
-            <button
-              onClick={() => setConfirmReset(true)}
-              style={{ background: 'transparent', color: 'var(--error)', border: '1px solid var(--error)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-            >
-              Reset organization
-            </button>
-          ) : (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={handleResetOrg}
-                disabled={resetting}
-                style={{ background: 'var(--error)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: resetting ? 'wait' : 'pointer', opacity: resetting ? 0.6 : 1 }}
-              >
-                {resetting ? 'Closing on-chain…' : 'Yes, reset'}
-              </button>
-              <button
-                onClick={() => setConfirmReset(false)}
-                disabled={resetting}
-                style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-          {resetError && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{resetError}</div>}
-        </div>
-        </>
-        )}
       </main>
 
       <PayrollPanel open={payrollPanelOpen} onClose={closePayrollPanel} employees={employees} onPayrollComplete={handlePayrollComplete} />

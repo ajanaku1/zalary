@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
-import { Transaction, SystemProgram, PublicKey } from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
 import { getAssociatedTokenAddressSync } from '@solana/spl-token'
 import { useProgram } from '../../hooks/useProgram'
-import { findOrganizationPda, runPayroll as runPayrollOnChain, pollConfirm } from '../../lib/program'
+import { findOrganizationPda, runPayroll as runPayrollOnChain } from '../../lib/program'
 
 const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
 
@@ -119,34 +119,34 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
             !!e.walletFull && !!e.salary && e.salary > 0
         )
 
-        if (program && payableEmployees.length > 0) {
-          const [orgPda] = findOrganizationPda(publicKey)
-          const orgAccount = await (program.account as any).organization.fetchNullable(orgPda)
-          if (!orgAccount) throw new Error('Organization not found on-chain. Complete setup first.')
-
-          let payrollCount = Number(orgAccount.payrollCount)
-          for (const emp of payableEmployees) {
-            const employeeWalletPk = new PublicKey(emp.walletFull)
-            const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, employeeWalletPk)
-            const { tx } = await runPayrollOnChain(
-              program,
-              orgPda,
-              employeeWalletPk,
-              employeeAta,
-              USDC_MINT,
-              Math.round(emp.salary * 1_000_000),
-              payrollCount,
-            )
-            lastSig = tx
-            payrollCount++
-          }
-        } else {
-          // Demo/no-wallet mode: self-transfer to prove wallet ownership
-          const tx = new Transaction().add(
-            SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: publicKey, lamports: 0 })
+        if (!program) {
+          throw new Error('Wallet not connected to Solana program. Reconnect and retry.')
+        }
+        if (payableEmployees.length === 0) {
+          throw new Error(
+            `No payable employees. ${employees.length} employee(s) loaded but none have both an on-chain wallet and a salary > 0. Open each employee in the dashboard, set a salary, and click "Encrypt & Save" so the salary lands on-chain.`
           )
-          lastSig = await sendTransaction(tx, connection)
-          await pollConfirm(connection, lastSig)
+        }
+
+        const [orgPda] = findOrganizationPda(publicKey)
+        const orgAccount = await (program.account as any).organization.fetchNullable(orgPda)
+        if (!orgAccount) throw new Error('Organization not found on-chain. Complete the onboarding flow first.')
+
+        let payrollCount = Number(orgAccount.payrollCount)
+        for (const emp of payableEmployees) {
+          const employeeWalletPk = new PublicKey(emp.walletFull)
+          const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, employeeWalletPk)
+          const { tx } = await runPayrollOnChain(
+            program,
+            orgPda,
+            employeeWalletPk,
+            employeeAta,
+            USDC_MINT,
+            Math.round(emp.salary * 1_000_000),
+            payrollCount,
+          )
+          lastSig = tx
+          payrollCount++
         }
 
         setSigning(false)

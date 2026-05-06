@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
-import { Transaction, SystemProgram, PublicKey } from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
 import { getAssociatedTokenAddressSync } from '@solana/spl-token'
 import { useIDKitRequest, IDKitRequestWidget } from '@worldcoin/idkit'
 import { deviceLegacy } from '@worldcoin/idkit-core'
@@ -11,7 +11,7 @@ import TopNav from '../../components/TopNav'
 import { openMoonPaySell } from '../../lib/moonpay'
 import { WORLD_ID_APP_ID, WORLD_ID_ACTION } from '../../lib/worldid'
 import { useProgram } from '../../hooks/useProgram'
-import { verifyWorldId as verifyWorldIdOnChain, findOrganizationPda, claimFunds as claimFundsOnChain, pollConfirm } from '../../lib/program'
+import { verifyWorldId as verifyWorldIdOnChain, findOrganizationPda, claimFunds as claimFundsOnChain } from '../../lib/program'
 
 const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
 
@@ -93,22 +93,17 @@ export default function Portal() {
     setClaimTx(null)
     try {
       const storedAuthority = localStorage.getItem('zalary_org_authority')
-      if (program && storedAuthority) {
-        const authorityPk = new PublicKey(storedAuthority)
-        const [orgPda] = findOrganizationPda(authorityPk)
-        const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, publicKey)
-        const { tx } = await claimFundsOnChain(program, orgPda, employeeAta, employeeAta, USDC_MINT, usdcBalance)
-        setClaimTx(tx)
-        setUsdcBalance(0)
-        setUsdcDisplayBalance('0.00')
-      } else {
-        const tx = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: publicKey, lamports: 0 })
-        )
-        const sig = await sendTransaction(tx, connection)
-        await pollConfirm(connection, sig)
-        setClaimTx(sig)
+      if (!program) throw new Error('Wallet not connected to Solana program. Reconnect and retry.')
+      if (!storedAuthority) {
+        throw new Error('Organization not registered on this device. Ask your employer to share their org link, or connect from the same browser used during onboarding.')
       }
+      const authorityPk = new PublicKey(storedAuthority)
+      const [orgPda] = findOrganizationPda(authorityPk)
+      const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, publicKey)
+      const { tx } = await claimFundsOnChain(program, orgPda, employeeAta, employeeAta, USDC_MINT, usdcBalance)
+      setClaimTx(tx)
+      setUsdcBalance(0)
+      setUsdcDisplayBalance('0.00')
     } catch (err: any) {
       console.error('Claim tx failed:', err)
       setClaimError(err?.message || 'Transaction failed')

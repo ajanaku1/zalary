@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { PublicKey } from '@solana/web3.js'
-import { getAssociatedTokenAddressSync } from '@solana/spl-token'
+import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token'
 import { useProgram } from '../../hooks/useProgram'
 import { findOrganizationPda, runPayroll as runPayrollOnChain } from '../../lib/program'
 
-const USDC_MINT = new PublicKey('2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv')
+const USDC_MINT = new PublicKey('AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD')
 
 interface PayrollEmployee {
   initials: string
@@ -135,7 +135,7 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
         let payrollCount = Number(orgAccount.payrollCount)
         for (const emp of payableEmployees) {
           const employeeWalletPk = new PublicKey(emp.walletFull)
-          const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, employeeWalletPk)
+          const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, employeeWalletPk, false, TOKEN_2022_PROGRAM_ID)
           const { tx } = await runPayrollOnChain(
             program,
             orgPda,

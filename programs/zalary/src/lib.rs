@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::token_interface::{
+    self, Mint, TokenAccount, TokenInterface, TransferChecked, CloseAccount,
+};
 
 pub mod errors;
 pub mod state;
@@ -93,15 +95,16 @@ pub mod zalary {
     pub fn fund_treasury(ctx: Context<FundTreasury>, amount: u64) -> Result<()> {
         require!(amount > 0, ZalaryError::InvalidAmount);
 
-        let transfer_ctx = CpiContext::new(
+        let cpi_ctx = CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
-            Transfer {
+            TransferChecked {
                 from: ctx.accounts.funder_token_account.to_account_info(),
+                mint: ctx.accounts.usdc_mint.to_account_info(),
                 to: ctx.accounts.treasury.to_account_info(),
                 authority: ctx.accounts.funder.to_account_info(),
             },
         );
-        token::transfer(transfer_ctx, amount)?;
+        token_interface::transfer_checked(cpi_ctx, amount, ctx.accounts.usdc_mint.decimals)?;
 
         msg!("Treasury funded with {} tokens", amount);
         Ok(())
@@ -140,17 +143,18 @@ pub mod zalary {
         ];
         let signer_seeds = &[&seeds[..]];
 
-        // Transfer from treasury to employee token account
-        let transfer_ctx = CpiContext::new_with_signer(
+        // Transfer from treasury to employee token account (Token-2022 compatible)
+        let cpi_ctx = CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
-            Transfer {
+            TransferChecked {
                 from: ctx.accounts.treasury.to_account_info(),
+                mint: ctx.accounts.usdc_mint.to_account_info(),
                 to: ctx.accounts.employee_token_account.to_account_info(),
                 authority: ctx.accounts.organization.to_account_info(),
             },
             signer_seeds,
         );
-        token::transfer(transfer_ctx, amount)?;
+        token_interface::transfer_checked(cpi_ctx, amount, ctx.accounts.usdc_mint.decimals)?;
 
         // Update payroll run
         let payroll = &mut ctx.accounts.payroll_run;
@@ -196,15 +200,16 @@ pub mod zalary {
         );
 
         // Transfer from employee escrow ATA to claimer's personal ATA
-        let transfer_ctx = CpiContext::new(
+        let cpi_ctx = CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
-            Transfer {
+            TransferChecked {
                 from: ctx.accounts.escrow_token_account.to_account_info(),
+                mint: ctx.accounts.usdc_mint.to_account_info(),
                 to: ctx.accounts.claimer_token_account.to_account_info(),
                 authority: ctx.accounts.claimer.to_account_info(),
             },
         );
-        token::transfer(transfer_ctx, amount)?;
+        token_interface::transfer_checked(cpi_ctx, amount, ctx.accounts.usdc_mint.decimals)?;
 
         msg!("Employee claimed {} tokens", amount);
         Ok(())
@@ -256,16 +261,16 @@ pub mod zalary {
         let signer_seeds = &[&seeds[..]];
 
         // close_account requires the token account to be empty (token program enforces this)
-        let close_ctx = CpiContext::new_with_signer(
+        let cpi_ctx = CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
-            token::CloseAccount {
+            CloseAccount {
                 account: ctx.accounts.treasury.to_account_info(),
                 destination: ctx.accounts.authority.to_account_info(),
                 authority: ctx.accounts.organization.to_account_info(),
             },
             signer_seeds,
         );
-        token::close_account(close_ctx)?;
+        token_interface::close_account(cpi_ctx)?;
 
         msg!("Organization closed: {}", org.name);
         Ok(())
@@ -288,16 +293,17 @@ pub mod zalary {
         ];
         let signer_seeds = &[&seeds[..]];
 
-        let transfer_ctx = CpiContext::new_with_signer(
+        let cpi_ctx = CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
-            Transfer {
+            TransferChecked {
                 from: ctx.accounts.treasury.to_account_info(),
+                mint: ctx.accounts.usdc_mint.to_account_info(),
                 to: ctx.accounts.authority_token_account.to_account_info(),
                 authority: ctx.accounts.organization.to_account_info(),
             },
             signer_seeds,
         );
-        token::transfer(transfer_ctx, amount)?;
+        token_interface::transfer_checked(cpi_ctx, amount, ctx.accounts.usdc_mint.decimals)?;
 
         msg!("Treasury withdrawal: {} tokens", amount);
         Ok(())
@@ -328,15 +334,15 @@ pub struct CreateOrganization<'info> {
         seeds = [b"treasury", organization.key().as_ref()],
         bump,
     )]
-    pub treasury: Account<'info, TokenAccount>,
+    pub treasury: InterfaceAccount<'info, TokenAccount>,
 
-    pub usdc_mint: Account<'info, Mint>,
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
 
     #[account(mut)]
     pub authority: Signer<'info>,
 
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub rent: Sysvar<'info, Rent>,
 }
 
@@ -422,20 +428,20 @@ pub struct FundTreasury<'info> {
         token::mint = usdc_mint,
         token::authority = organization,
     )]
-    pub treasury: Account<'info, TokenAccount>,
+    pub treasury: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
         token::mint = usdc_mint,
     )]
-    pub funder_token_account: Account<'info, TokenAccount>,
+    pub funder_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub usdc_mint: Account<'info, Mint>,
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
 
     #[account(mut)]
     pub funder: Signer<'info>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
@@ -456,7 +462,7 @@ pub struct RunPayroll<'info> {
         token::mint = usdc_mint,
         token::authority = organization,
     )]
-    pub treasury: Box<Account<'info, TokenAccount>>,
+    pub treasury: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
@@ -471,7 +477,7 @@ pub struct RunPayroll<'info> {
         mut,
         token::mint = usdc_mint,
     )]
-    pub employee_token_account: Box<Account<'info, TokenAccount>>,
+    pub employee_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         init,
@@ -482,7 +488,7 @@ pub struct RunPayroll<'info> {
     )]
     pub payroll_run: Box<Account<'info, PayrollRun>>,
 
-    pub usdc_mint: Account<'info, Mint>,
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
 
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -499,7 +505,7 @@ pub struct RunPayroll<'info> {
     pub pause_check: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
@@ -567,21 +573,21 @@ pub struct ClaimFunds<'info> {
         mut,
         token::mint = usdc_mint,
     )]
-    pub escrow_token_account: Account<'info, TokenAccount>,
+    pub escrow_token_account: InterfaceAccount<'info, TokenAccount>,
 
     /// Employee's personal token account to receive claimed funds.
     #[account(
         mut,
         token::mint = usdc_mint,
     )]
-    pub claimer_token_account: Account<'info, TokenAccount>,
+    pub claimer_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub usdc_mint: Account<'info, Mint>,
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
 
     #[account(mut)]
     pub claimer: Signer<'info>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
@@ -620,12 +626,12 @@ pub struct CloseOrganization<'info> {
         seeds = [b"treasury", organization.key().as_ref()],
         bump,
     )]
-    pub treasury: Account<'info, TokenAccount>,
+    pub treasury: InterfaceAccount<'info, TokenAccount>,
 
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
@@ -645,17 +651,17 @@ pub struct WithdrawTreasury<'info> {
         token::mint = usdc_mint,
         token::authority = organization,
     )]
-    pub treasury: Account<'info, TokenAccount>,
+    pub treasury: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
         token::mint = usdc_mint,
     )]
-    pub authority_token_account: Account<'info, TokenAccount>,
+    pub authority_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub usdc_mint: Account<'info, Mint>,
+    pub usdc_mint: InterfaceAccount<'info, Mint>,
 
     pub authority: Signer<'info>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }

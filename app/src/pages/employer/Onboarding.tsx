@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useConnection } from '@solana/wallet-adapter-react'
 import { PublicKey } from '@solana/web3.js'
-import { getAssociatedTokenAddressSync } from '@solana/spl-token'
+import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token'
 import { resolveSolDomain } from '../../lib/sns'
 import { isValidSolanaAddress } from '../../lib/utils'
 import { useProgram } from '../../hooks/useProgram'
 import { createOrganization as createOrgOnChain, fundTreasury as fundTreasuryOnChain, findOrganizationPda } from '../../lib/program'
 
-const USDC_MINT = new PublicKey('2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv')
+const USDC_MINT = new PublicKey('AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD')
 
 interface OnboardingProps {
   onComplete: (data: {
@@ -215,7 +215,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       }
       const authority = program.provider.publicKey!
       const [orgPda] = findOrganizationPda(authority)
-      const signerAta = getAssociatedTokenAddressSync(USDC_MINT, authority)
+      const signerAta = getAssociatedTokenAddressSync(USDC_MINT, authority, false, TOKEN_2022_PROGRAM_ID)
       const { tx } = await fundTreasuryOnChain(
         program,
         orgPda,

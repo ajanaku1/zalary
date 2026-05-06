@@ -16,7 +16,7 @@ import { AVATAR_COLORS, deriveInitials, truncateAddress } from '../../lib/utils'
 import type { Employee } from './EmployeeDetail'
 
 // Devnet USDC mint address
-const USDC_MINT = new PublicKey('2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv')
+const USDC_MINT = new PublicKey('AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD')
 
 const DEFAULT_EMPLOYEES: Employee[] = []
 

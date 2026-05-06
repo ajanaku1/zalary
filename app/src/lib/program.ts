@@ -1,6 +1,6 @@
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor'
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, type Connection, type Transaction } from '@solana/web3.js'
-import { TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token'
+import { TOKEN_2022_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token'
 import { IDL } from './zalary_idl'
 
 // Poll signature status manually instead of using connection.confirmTransaction,
@@ -139,7 +139,7 @@ export async function createOrganization(
       usdcMint,
       authority,
       systemProgram: SystemProgram.programId,
-      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
       rent: SYSVAR_RENT_PUBKEY,
     })
     .transaction()
@@ -195,13 +195,13 @@ export async function fundTreasury(
       funderTokenAccount: signerTokenAccount,
       usdcMint,
       funder,
-      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
     })
     .transaction()
 
   if (!ataInfo) {
     tx.instructions.unshift(
-      createAssociatedTokenAccountIdempotentInstruction(funder, signerTokenAccount, funder, usdcMint),
+      createAssociatedTokenAccountIdempotentInstruction(funder, signerTokenAccount, funder, usdcMint, TOKEN_2022_PROGRAM_ID),
     )
   }
 
@@ -238,7 +238,7 @@ export async function runPayroll(
       authority,
       pauseCheck: pausePda,
       systemProgram: SystemProgram.programId,
-      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
     })
     .transaction()
 
@@ -246,7 +246,7 @@ export async function runPayroll(
   // has a valid destination. The employer (authority) pays the rent.
   if (!ataInfo) {
     tx.instructions.unshift(
-      createAssociatedTokenAccountIdempotentInstruction(authority, employeeTokenAccount, employeeWallet, usdcMint),
+      createAssociatedTokenAccountIdempotentInstruction(authority, employeeTokenAccount, employeeWallet, usdcMint, TOKEN_2022_PROGRAM_ID),
     )
   }
 
@@ -320,7 +320,7 @@ export async function closeOrganization(
       organization: orgPda,
       treasury: treasuryPda,
       authority,
-      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
     })
     .transaction()
   return { tx: await sendTx(program, tx) }
@@ -344,7 +344,7 @@ export async function withdrawTreasury(
       authorityTokenAccount,
       usdcMint,
       authority,
-      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
     })
     .transaction()
   return { tx: await sendTx(program, tx) }
@@ -390,7 +390,7 @@ export async function claimFunds(
       claimerTokenAccount,
       usdcMint,
       claimer,
-      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
     })
     .transaction()
   return { tx: await sendTx(program, tx) }

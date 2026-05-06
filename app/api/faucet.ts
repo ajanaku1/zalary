@@ -5,13 +5,13 @@ import {
   Transaction,
 } from '@solana/web3.js'
 import {
-  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
   createMintToInstruction,
   getAssociatedTokenAddressSync,
 } from '@solana/spl-token'
 
-const ZUSDC_MINT = new PublicKey('2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv')
+const ZUSDC_MINT = new PublicKey('AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD')
 const RPC_URL = process.env.HELIUS_RPC_URL || 'https://api.devnet.solana.com'
 const AMOUNT_PER_REQUEST = 1_000_000_000 // 1000 zUSDC (6 decimals)
 
@@ -39,7 +39,11 @@ export default async function handler(req: any, res: any) {
     const faucet = loadFaucetKeypair()
     const connection = new Connection(RPC_URL, 'confirmed')
 
-    const recipientAta = getAssociatedTokenAddressSync(ZUSDC_MINT, recipient)
+    // Token-2022 ATA — must pass TOKEN_2022_PROGRAM_ID for both ATA derivation
+    // and the mintTo CPI, otherwise SPL Token rejects the cross-program account.
+    const recipientAta = getAssociatedTokenAddressSync(
+      ZUSDC_MINT, recipient, false, TOKEN_2022_PROGRAM_ID,
+    )
 
     const tx = new Transaction()
     tx.add(
@@ -48,6 +52,7 @@ export default async function handler(req: any, res: any) {
         recipientAta,
         recipient,
         ZUSDC_MINT,
+        TOKEN_2022_PROGRAM_ID,
       ),
     )
     tx.add(
@@ -57,7 +62,7 @@ export default async function handler(req: any, res: any) {
         faucet.publicKey,
         AMOUNT_PER_REQUEST,
         [],
-        TOKEN_PROGRAM_ID,
+        TOKEN_2022_PROGRAM_ID,
       ),
     )
 

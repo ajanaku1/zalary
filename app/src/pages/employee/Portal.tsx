@@ -3,7 +3,7 @@ import { usePrivy } from '@privy-io/react-auth'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { PublicKey } from '@solana/web3.js'
-import { getAssociatedTokenAddressSync } from '@solana/spl-token'
+import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token'
 import { useIDKitRequest, IDKitRequestWidget } from '@worldcoin/idkit'
 import { deviceLegacy } from '@worldcoin/idkit-core'
 import type { IDKitResult } from '@worldcoin/idkit-core'
@@ -13,7 +13,7 @@ import { WORLD_ID_APP_ID, WORLD_ID_ACTION } from '../../lib/worldid'
 import { useProgram } from '../../hooks/useProgram'
 import { verifyWorldId as verifyWorldIdOnChain, findOrganizationPda, claimFunds as claimFundsOnChain } from '../../lib/program'
 
-const USDC_MINT = new PublicKey('2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv')
+const USDC_MINT = new PublicKey('AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD')
 
 export default function Portal() {
   const [selectedCurrency, setSelectedCurrency] = useState('USD')
@@ -41,7 +41,7 @@ export default function Portal() {
 
   useEffect(() => {
     if (!publicKey || !connection) return
-    const ata = getAssociatedTokenAddressSync(USDC_MINT, publicKey)
+    const ata = getAssociatedTokenAddressSync(USDC_MINT, publicKey, false, TOKEN_2022_PROGRAM_ID)
     connection.getTokenAccountBalance(ata)
       .then(({ value }) => {
         setUsdcBalance(Number(value.amount) || 0)
@@ -99,7 +99,7 @@ export default function Portal() {
       }
       const authorityPk = new PublicKey(storedAuthority)
       const [orgPda] = findOrganizationPda(authorityPk)
-      const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, publicKey)
+      const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, publicKey, false, TOKEN_2022_PROGRAM_ID)
       const { tx } = await claimFundsOnChain(program, orgPda, employeeAta, employeeAta, USDC_MINT, usdcBalance)
       setClaimTx(tx)
       setUsdcBalance(0)

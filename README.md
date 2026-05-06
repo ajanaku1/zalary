@@ -43,7 +43,7 @@ The current build encrypts salary client-side with AES-256-GCM as a placeholder.
 | Onboarding | Privy (social login for non-crypto employees) |
 | Identity | World ID (proof of personhood) |
 | Off-ramp | MoonPay sell widget |
-| Token | USDC devnet (`2Bis7EEvjTnQLwLnAtquKxS4y2uyzhbNuzoW6UEN68Gv`) |
+| Token | USDC devnet (`AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD`) |
 
 ---
 

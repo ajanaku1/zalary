@@ -154,7 +154,6 @@ export const IDL = {
     { name: "Organization", discriminator: [145,38,152,251,91,57,118,160] },
     { name: "Employee", discriminator: [98,238,61,252,130,77,105,67] },
     { name: "PayrollRun", discriminator: [11,197,215,124,64,255,82,248] },
-    { name: "OrgPause", discriminator: [153,144,73,118,168,103,248,240] },
   ],
   types: [
     {
@@ -211,10 +210,6 @@ export const IDL = {
         kind: "enum",
         variants: [{ name: "Active" }, { name: "Pending" }, { name: "Inactive" }],
       },
-    },
-    {
-      name: "OrgPause",
-      type: { kind: "struct", fields: [] },
     },
     {
       name: "PayrollStatus",

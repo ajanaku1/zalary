@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { PublicKey } from '@solana/web3.js'
-import { encryptSalary } from '../../lib/arcium'
+import { encryptSalary, decryptSalary } from '../../lib/arcium'
 import { useProgram } from '../../hooks/useProgram'
 import { findOrganizationPda, updateSalary as updateSalaryOnChain } from '../../lib/program'
 
@@ -36,11 +36,27 @@ export default function EmployeeDetail({ open, onClose, employee, onSalarySet, o
 
   useEffect(() => {
     if (open && employee) {
-      setSalaryInput(employee.salary ? String(employee.salary) : '')
       setFrequency(employee.payFrequency || 'monthly')
       setEncrypted(!!employee.encryptedSalary)
       setError(null)
       document.body.style.overflow = 'hidden'
+
+      // If we already have a plaintext salary in memory, use it. Otherwise try to
+      // decrypt the on-chain blob so the employer can see and edit the value
+      // without re-typing it.
+      if (employee.salary) {
+        setSalaryInput(String(employee.salary))
+      } else if (employee.encryptedSalary) {
+        decryptSalary(employee.encryptedSalary, employee.wallet)
+          .then(amount => {
+            if (amount && Number.isFinite(amount) && amount > 0) {
+              setSalaryInput(String(Math.round(amount)))
+            }
+          })
+          .catch(() => { /* leave input blank, user re-enters */ })
+      } else {
+        setSalaryInput('')
+      }
     } else {
       document.body.style.overflow = ''
     }

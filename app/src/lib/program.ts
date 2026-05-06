@@ -23,16 +23,23 @@ async function sendTx(program: ZalaryProgram, tx: Transaction): Promise<string> 
   const signed = await provider.wallet.signTransaction(tx)
   const rawTx = signed.serialize()
 
-  const sig = await connection.sendRawTransaction(rawTx, {
-    skipPreflight: true,
-    maxRetries: 5,
-  })
+  // Run a real preflight simulation so program errors (insufficient funds, unauthorized,
+  // PDA mismatch) surface before we burn fees and start polling.
+  const sim = await connection.simulateTransaction(signed, { commitment: 'confirmed', sigVerify: false })
+  if (sim.value.err) {
+    const logs = sim.value.logs ?? []
+    const programError = logs.find(l => l.includes('Error:') || l.includes('failed:'))
+    throw new Error(programError || `Simulation failed: ${JSON.stringify(sim.value.err)}`)
+  }
 
-  // Poll: re-send periodically + check status until confirmed or blockhash expires.
+  // Preflight passed. Send with skipPreflight=true now (avoid double simulation on the RPC)
+  // and rely on the polling loop below for confirmation.
+  const sig = await connection.sendRawTransaction(rawTx, { skipPreflight: true, maxRetries: 5 })
+
   while (true) {
     const { value } = await connection.getSignatureStatuses([sig])
     const status = value[0]
-    if (status?.err) throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`)
+    if (status?.err) throw new Error(`Transaction failed on-chain: ${JSON.stringify(status.err)}`)
     if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') {
       return sig
     }
@@ -40,7 +47,6 @@ async function sendTx(program: ZalaryProgram, tx: Transaction): Promise<string> 
     if (currentHeight > lastValidBlockHeight) {
       throw new Error(`Transaction expired (blockhash no longer valid). Signature: ${sig}`)
     }
-    // Re-broadcast in case the leader dropped it.
     try { await connection.sendRawTransaction(rawTx, { skipPreflight: true, maxRetries: 0 }) } catch {}
     await new Promise(r => setTimeout(r, 2000))
   }

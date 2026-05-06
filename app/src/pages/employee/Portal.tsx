@@ -80,6 +80,14 @@ export default function Portal() {
       setClaimError('No claimable balance')
       return
     }
+    // Client-side World ID gate. The mainnet build moves this check into the
+    // program itself (verify world_id_verified == true on the Employee PDA
+    // inside claim_funds). Until then, enforce in the UI so the demo flow
+    // matches the production behavior.
+    if (!worldIdProof) {
+      setClaimError('Verify with World ID before claiming')
+      return
+    }
     setClaiming(true)
     setClaimError(null)
     setClaimTx(null)

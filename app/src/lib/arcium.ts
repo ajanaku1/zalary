@@ -1,15 +1,24 @@
-// Arcium CSPL — Confidential SPL token transfers
-// Docs: https://docs.arcium.com
-// Fallback: Solana Token-2022 Confidential Balances extension
+// Salary obfuscation layer — STRUCTURAL PLACEHOLDER, not real privacy.
 //
-// Current implementation: Since Arcium CSPL is not yet live on devnet,
-// we use a local encryption scheme compatible with the approach:
-// - Salaries are encrypted client-side before on-chain storage
-// - Only the employer (who sets salary) and employee (who decrypts) can read amounts
-// - On-chain, all observers see is 64 bytes of ciphertext
+// What this currently is:
+//   - AES-256-GCM where the key is derived from the recipient's *public* key
+//   - This means anyone with the recipient's pubkey (i.e., any chain observer)
+//     can derive the same key and decrypt
+//   - The 64-byte on-chain blob is opaque to a casual viewer but trivially
+//     reversible by anyone who reads this file
 //
-// When Arcium CSPL or Token-2022 Confidential Transfers are available,
-// swap in the real MPC/ZK encryption here.
+// What it is *not*:
+//   - It is not asymmetric encryption
+//   - It is not a shared secret
+//   - It does not provide chain-level privacy for salary amounts
+//
+// Why it's still in the repo:
+//   The shape of the data (64-byte blob on the Employee account, encrypt/decrypt
+//   round-trip in the UI) matches the slot we'll fill with the real privacy
+//   primitive: Solana Token-2022 confidential transfers (employer = auditor key)
+//   or Arcium CSPL when their devnet cluster ships. The migration is tracked as
+//   P0 in the Frontier roadmap. Until then, treat this file as a UI scaffold,
+//   not a security boundary.
 
 export interface EncryptedAmount {
   ciphertext: Uint8Array  // 64 bytes stored on-chain
@@ -102,25 +111,19 @@ export async function decryptSalary(encrypted: Uint8Array, recipientPubkey: stri
 }
 
 /**
- * Privacy layer documentation for hackathon submission:
+ * Production privacy path (what replaces this file):
  *
- * APPROACH: Hybrid encryption model
- * - Salary amounts are encrypted client-side before being written to the Solana program
- * - The 64-byte ciphertext is stored in the Employee account's `encrypted_salary` field
- * - On-chain, observers see encrypted bytes only — no salary amounts are exposed
- * - Decryption requires knowledge of the recipient's public key (shared secret derivation)
+ * 1. Token-2022 Confidential Transfers — Solana's native extension. Treasury and
+ *    employee ATAs become confidential balances using ElGamal commitments. The
+ *    employer holds the auditor key, which doubles as the compliance/selective-
+ *    disclosure primitive. No MPC cluster, no L2.
  *
- * PRODUCTION PATH:
- * 1. Arcium CSPL (preferred) — when available, transfers happen entirely via MPC
- *    so the amount is never visible to any single party during the transfer
- * 2. Token-2022 Confidential Balances — Solana's native extension that uses
- *    ElGamal + Pedersen commitments for balance privacy
+ * 2. Arcium CSPL — alternative path when their MPC cluster is available on the
+ *    target network. The transfer itself runs through MPC so no single party
+ *    sees the amount in transit.
  *
- * CURRENT DEMO:
- * Uses AES-256-GCM with HKDF key derivation. The approach is sound but
- * not fully zero-knowledge. For the hackathon, the critical demonstration is:
- * - Salary data IS encrypted before on-chain storage
- * - Only authorized parties CAN decrypt
- * - Blockchain explorers CANNOT see salary amounts
+ * The current file is a UI placeholder so the rest of the stack (Employee PDA
+ * layout, encrypt/decrypt UI, dashboard) is shaped correctly for the migration.
+ * It is not a security boundary. See README "Honest status" + BUSINESS.md.
  */
-export const PRIVACY_LAYER = 'client-side-encryption-with-arcium-cspl-path' as const
+export const PRIVACY_LAYER = 'placeholder-pending-token2022-confidential-transfer-migration' as const

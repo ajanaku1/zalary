@@ -28,8 +28,8 @@ export default function Landing() {
         {/* Hero */}
         <section className="hero">
           <div className="hero-left">
-            <h1>Pay your team <span className="highlight">privately</span> on Solana</h1>
-            <p>Salaries go on-chain. The amounts don't. Only you and your team see the numbers — everyone else sees that something moved.</p>
+            <h1>Pay contractors anywhere, <span className="highlight">privately</span></h1>
+            <p>USDC payroll on Solana for remote teams paying across borders. Amounts stay hidden on-chain. Employees cash out to NGN, INR, BRL, or KES inside the same app.</p>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(108,92,231,0.08)', border: '1px solid rgba(108,92,231,0.2)', borderRadius: 'var(--radius-full)', padding: '6px 14px', fontSize: 12, fontWeight: 600, color: 'var(--accent)', marginBottom: 20 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               Colosseum Frontier Hackathon 2026

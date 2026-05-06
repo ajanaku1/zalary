@@ -2,32 +2,32 @@
 
 ![Zalary landing page](docs/images/landing.png)
 
-Pay your team in USDC on Solana. Salary amounts stay private on-chain. Employees cash out to local currency via MoonPay without leaving the app.
+Confidential payroll for remote teams paying contractors across borders. USDC on Solana, salary amounts hidden on-chain, fiat off-ramp to local currency built into the same app.
 
 Built for the [Colosseum Frontier Hackathon 2026](https://www.colosseum.org/frontier).
 
 ---
 
-## The problem
+## The problem I'm actually solving
 
-Paying people in crypto is public by default. Anyone with a block explorer can see exactly what you paid, when, and to whom. That's fine for a lot of things. It's not fine for salary.
+I live in Lagos. Every founder I know who pays remote contractors does it through some combination of Binance P2P, Wise, and a Telegram DM with a wallet address. The Wise version eats 1.5% per leg and doesn't even support most of the corridors that matter. The crypto version works, but every payment is public on Solscan — anyone with the treasury address can read off the entire payroll, including who got a raise and when.
 
-Zalary runs payroll on Solana with encrypted amounts. The chain records that a transfer happened. The number inside stays between the employer and the employee.
+Stablecoin payroll in emerging markets is already a normal thing. It's just done badly. Zalary is the version where the privacy is built into the rail, the off-ramp is one tap, and the founder doesn't have to teach their contractor what an ATA is.
 
-Once an employee receives their USDC, they can cash out to local currency directly from the app via MoonPay, no exchange account required. The whole loop is: employer funds treasury in USDC, payroll runs on-chain, employee claims their salary and converts to NGN, INR, BRL, or wherever they are.
+Why now: Solana shipped Token-2022 confidential transfers in 2024, and the auditor-key model fits the regulatory direction (selective disclosure, not anonymity). The primitive landed and nobody has shipped a payroll product on top of it yet.
 
 ---
 
 ## How it works
 
-1. **Employer creates an org on-chain** — calls `create_organization`, which initializes a PDA and a USDC treasury account.
-2. **Employer adds employees** — each employee gets a PDA (`[b"employee", org_pda, wallet]`) with their wallet and an encrypted salary blob stored on-chain.
-3. **Payroll runs** — `run_payroll` pulls from the treasury, sends USDC to the employee's ATA, and logs a `PayrollRun` account. Salary amounts are encrypted via Arcium MPC before they're written anywhere.
-4. **Employee claims** — employees connect their wallet to the employee portal, check their balance, and call `claim_funds`.
-5. **Identity check** — World ID verification gates payroll claims to verified humans. The nullifier hash is stored on the employee PDA to prevent double-claims.
-6. **Fiat off-ramp** — after claiming, employees can convert their USDC to local currency via the MoonPay sell widget. Pick a currency (USD, EUR, NGN, INR, BRL), open MoonPay, done. No separate exchange account needed.
+1. Employer creates an org on-chain. `create_organization` initializes a PDA and a USDC treasury account.
+2. Employer adds employees. Each employee gets a PDA (`[b"employee", org_pda, wallet]`) with their wallet and an encrypted salary blob.
+3. Payroll runs. `run_payroll` pulls from the treasury and sends USDC to the employee's ATA, logs a `PayrollRun` account.
+4. Employee claims. They connect a wallet, see their balance, and call `claim_funds`.
+5. Identity check. World ID gates payroll claims to verified humans. The nullifier hash is stored on the employee PDA so a person can't double-claim across wallets.
+6. Off-ramp. After claiming, employees convert USDC to local currency through the MoonPay sell widget. NGN, INR, BRL, KES, ARS, USD, EUR. No separate exchange account.
 
-The salary encryption uses AES-256-GCM client-side (via `lib/arcium.ts`) and the ciphertext is what goes on-chain. The plaintext never touches the blockchain.
+The current build encrypts salary client-side with AES-256-GCM as a placeholder. The full Token-2022 confidential-transfer migration is in progress and is the headline technical work for the final submission.
 
 ---
 
@@ -35,34 +35,34 @@ The salary encryption uses AES-256-GCM client-side (via `lib/arcium.ts`) and the
 
 | Layer | What |
 |---|---|
-| Blockchain | Solana (devnet) |
-| Smart contracts | Anchor framework (Rust) |
-| Privacy | Arcium MPC for salary encryption |
-| Frontend | React + TypeScript + Vite |
+| Blockchain | Solana (devnet, mainnet planned post-hackathon) |
+| Smart contracts | Anchor (Rust) |
+| Privacy | Token-2022 confidential transfers (in migration) |
+| Frontend | React, TypeScript, Vite |
 | Wallet | Phantom via `@solana/wallet-adapter` |
-| Auth/onboarding | Privy (social login for non-crypto employees) |
+| Onboarding | Privy (social login for non-crypto employees) |
 | Identity | World ID (proof of personhood) |
-| Fiat off-ramp | MoonPay sell widget |
-| Tokens | USDC devnet (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`) |
+| Off-ramp | MoonPay sell widget |
+| Token | USDC devnet (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`) |
 
 ---
 
 ## Program
 
-Deployed on Solana devnet at:
+Deployed on Solana devnet:
 
 ```
 FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH
 ```
 
 Instructions:
-- `create_organization(name)` — create org + treasury token account
+- `create_organization(name)` — create org and treasury
 - `add_employee(wallet, encrypted_salary)` — register employee PDA
-- `fund_treasury(amount)` — deposit USDC to org vault
-- `run_payroll(amount)` — transfer from treasury to employee ATA, log PayrollRun
+- `fund_treasury(amount)` — deposit USDC
+- `run_payroll(amount)` — transfer from treasury to employee ATA, log a PayrollRun
 - `claim_funds(amount)` — employee claims their allocation
 - `update_salary(new_encrypted_salary)` — update salary on-chain
-- `verify_world_id(nullifier_hash)` — store World ID proof, mark employee as verified
+- `verify_world_id(nullifier_hash)` — store proof, mark employee verified
 - `withdraw_treasury(amount)` — employer pulls from vault
 
 ---
@@ -77,11 +77,11 @@ npm run dev
 ```
 
 You'll need:
-- A Phantom wallet set to devnet
-- Some devnet SOL (airdrop from `solana airdrop 2 <your-address> --url devnet`)
+- Phantom wallet on devnet
+- Some devnet SOL: `solana airdrop 2 <your-address> --url devnet`
 - Devnet USDC from the faucet at spl-token-faucet.com
 
-The app runs at `localhost:5173`. Employer flow at `/employer`, employee at `/employee`.
+App runs at `localhost:5173`. Employer flow at `/employer`, employee at `/employee`.
 
 ---
 
@@ -99,11 +99,12 @@ Zalary/
 │   │   │   └── employee/   # Portal (balance, claim, World ID, MoonPay)
 │   │   ├── lib/
 │   │   │   ├── program.ts  # Anchor instruction helpers + PDA finders
-│   │   │   ├── arcium.ts   # Salary encryption (AES-256-GCM)
+│   │   │   ├── arcium.ts   # Salary encryption (placeholder)
 │   │   │   └── worldid.ts  # World ID config
 │   │   └── hooks/
 │   │       └── useProgram.ts
 │   └── .env.example
+├── BUSINESS.md         # ICP, pricing, channels, 12-month roadmap
 └── Anchor.toml
 ```
 
@@ -114,18 +115,24 @@ Zalary/
 - Org creation and treasury funding
 - Employee registration with encrypted salary
 - Payroll execution (USDC transfers from treasury to employee ATAs)
-- Employee portal with live USDC balance (reads from token account)
+- Employee portal with live USDC balance read from the token account
 - World ID verification wired to the `verify_world_id` instruction
 - MoonPay sell widget for fiat off-ramp
 - Privy social login for non-crypto employees
 
 ---
 
-## Known limitations
+## Honest status (as of submission window)
 
-- Arcium MPC integration is currently a client-side AES-256-GCM placeholder. Full Arcium CSPL confidential token integration would require their MPC cluster on mainnet.
-- World ID gating on claims is implemented in the contract but not enforced in the demo flow (so you can test without a World App).
-- The `anchor build` command fails locally due to a `proc_macro2`/`anchor-syn` version conflict. The deployed binary on devnet was built in a clean environment.
+- AES-256-GCM client-side encryption is a placeholder. The Token-2022 confidential-transfer migration is the production privacy path and is the headline work for the final cut.
+- World ID verification is wired into the program (`verify_world_id` stores the proof on the employee PDA). The current demo flow does not gate `claim_funds` on `world_id_verified` so reviewers can test without a World App. The hard gate ships with the mainnet build.
+- Building the program locally requires the full Solana toolchain (`solana-cli` + `cargo-build-sbf`). The deployed devnet binary was built in a clean Anchor 0.30.1 environment. `proc-macro2` is pinned to `=1.0.94` in `programs/zalary/Cargo.toml` to prevent the macro-expansion break that hits anchor-syn 0.30.x with newer proc-macro2 releases.
+
+---
+
+## Business plan
+
+See [BUSINESS.md](./BUSINESS.md) for the ICP, pricing, channels, unit economics, and 12-month plan.
 
 ---
 

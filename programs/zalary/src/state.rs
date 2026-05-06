@@ -40,6 +40,12 @@ pub struct PayrollRun {
     pub bump: u8,
 }
 
+/// Empty marker account — its existence at ["pause", org_pda] pauses the org.
+/// No fields. The 8-byte discriminator is the entire account state.
+#[account]
+#[derive(InitSpace)]
+pub struct OrgPause {}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, InitSpace)]
 pub enum EmployeeStatus {
     Active,

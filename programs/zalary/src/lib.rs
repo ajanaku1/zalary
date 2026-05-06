@@ -124,6 +124,12 @@ pub mod zalary {
             ctx.accounts.treasury.amount >= amount,
             ZalaryError::InsufficientFunds
         );
+        // Pause check: pause_check is a passive AccountInfo at ["pause", org].
+        // If it carries any lamports/data, the org is paused.
+        require!(
+            ctx.accounts.pause_check.data_is_empty() && ctx.accounts.pause_check.lamports() == 0,
+            ZalaryError::OrganizationPaused
+        );
 
         let org = &ctx.accounts.organization;
         let org_key = org.authority.key();
@@ -223,6 +229,21 @@ pub mod zalary {
         employee.nullifier_hash = nullifier_hash;
 
         msg!("World ID verified for: {}", employee.wallet);
+        Ok(())
+    }
+
+    /// Pause all payroll operations for this organization. Useful for incident
+    /// response, compliance holds, or M&A freezes. Run_payroll will reject while
+    /// paused. Implemented as a separate PDA so existing orgs upgrade without
+    /// account migration.
+    pub fn pause_organization(_ctx: Context<PauseOrganization>) -> Result<()> {
+        msg!("Organization paused");
+        Ok(())
+    }
+
+    /// Resume payroll operations by closing the pause PDA.
+    pub fn resume_organization(_ctx: Context<ResumeOrganization>) -> Result<()> {
+        msg!("Organization resumed");
         Ok(())
     }
 
@@ -466,8 +487,64 @@ pub struct RunPayroll<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
+    /// Pause check — must be empty (no lamports, no data) for payroll to run.
+    /// Anchor doesn't validate seeds for AccountInfo, so the runtime check on
+    /// data_is_empty() inside the handler covers both "PDA exists" and "wrong
+    /// account passed" cases (a wrong account would have lamports/data too).
+    /// CHECK: passive existence check; seeds derived deterministically client-side.
+    #[account(
+        seeds = [b"pause", organization.key().as_ref()],
+        bump,
+    )]
+    pub pause_check: AccountInfo<'info>,
+
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct PauseOrganization<'info> {
+    #[account(
+        seeds = [b"org", authority.key().as_ref()],
+        bump = organization.bump,
+        has_one = authority,
+    )]
+    pub organization: Account<'info, Organization>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + OrgPause::INIT_SPACE,
+        seeds = [b"pause", organization.key().as_ref()],
+        bump,
+    )]
+    pub pause: Account<'info, OrgPause>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ResumeOrganization<'info> {
+    #[account(
+        seeds = [b"org", authority.key().as_ref()],
+        bump = organization.bump,
+        has_one = authority,
+    )]
+    pub organization: Account<'info, Organization>,
+
+    #[account(
+        mut,
+        close = authority,
+        seeds = [b"pause", organization.key().as_ref()],
+        bump,
+    )]
+    pub pause: Account<'info, OrgPause>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]

@@ -28,4 +28,7 @@ pub enum ZalaryError {
 
     #[msg("Arithmetic overflow")]
     Overflow,
+
+    #[msg("Organization payroll is paused")]
+    OrganizationPaused,
 }

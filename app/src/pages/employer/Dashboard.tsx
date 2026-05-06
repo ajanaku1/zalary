@@ -10,7 +10,7 @@ import AuthGate from './AuthGate'
 import Onboarding from './Onboarding'
 import { useRole } from '../../contexts/RoleContext'
 import { useProgram } from '../../hooks/useProgram'
-import { createOrganization, addEmployee, closeOrganization as closeOrganizationOnChain, findOrganizationPda, findTreasuryPda } from '../../lib/program'
+import { createOrganization, addEmployee, closeOrganization as closeOrganizationOnChain, pauseOrganization as pauseOrganizationOnChain, resumeOrganization as resumeOrganizationOnChain, isOrganizationPaused, findOrganizationPda, findTreasuryPda } from '../../lib/program'
 import { encryptSalary } from '../../lib/arcium'
 import { AVATAR_COLORS, deriveInitials, truncateAddress } from '../../lib/utils'
 import type { Employee } from './EmployeeDetail'
@@ -69,6 +69,38 @@ export default function Dashboard() {
   const [resetting, setResetting] = useState(false)
   const [resetError, setResetError] = useState<string | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
+  const [paused, setPaused] = useState<boolean | null>(null)
+  const [pauseToggling, setPauseToggling] = useState(false)
+  const [pauseError, setPauseError] = useState<string | null>(null)
+
+  // Poll pause state on load
+  useEffect(() => {
+    if (!program) return
+    const authority = program.provider.publicKey!
+    const [orgPda] = findOrganizationPda(authority)
+    isOrganizationPaused(program, orgPda).then(setPaused).catch(() => setPaused(null))
+  }, [program])
+
+  const handleTogglePause = useCallback(async () => {
+    if (!program) return
+    setPauseToggling(true)
+    setPauseError(null)
+    try {
+      const authority = program.provider.publicKey!
+      const [orgPda] = findOrganizationPda(authority)
+      if (paused) {
+        await resumeOrganizationOnChain(program, orgPda)
+        setPaused(false)
+      } else {
+        await pauseOrganizationOnChain(program, orgPda)
+        setPaused(true)
+      }
+    } catch (err: any) {
+      setPauseError(err?.message || 'Toggle failed')
+    } finally {
+      setPauseToggling(false)
+    }
+  }, [program, paused])
 
   const handleResetOrg = useCallback(async () => {
     if (!program) {
@@ -641,8 +673,44 @@ export default function Dashboard() {
         </div>
         )}
 
+        {/* Pause / Resume — on-chain payroll kill switch */}
+        <div style={{ maxWidth: 720, margin: '40px auto 16px', padding: '16px 20px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-elevated)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                Payroll status:{' '}
+                <span style={{ color: paused ? 'var(--warning)' : 'var(--success)' }}>
+                  {paused === null ? 'Loading…' : paused ? 'Paused' : 'Active'}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                On-chain kill switch. While paused, run_payroll rejects with OrganizationPaused (6009). Useful for incident response, M&A freezes, or compliance holds.
+              </p>
+            </div>
+            <button
+              onClick={handleTogglePause}
+              disabled={pauseToggling || !program}
+              style={{
+                background: paused ? 'var(--success)' : 'var(--warning)',
+                color: '#fff',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: 'var(--radius)',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: pauseToggling || !program ? 'wait' : 'pointer',
+                opacity: pauseToggling || !program ? 0.6 : 1,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {pauseToggling ? 'Working…' : paused ? 'Resume payroll' : 'Pause payroll'}
+            </button>
+          </div>
+          {pauseError && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{pauseError}</div>}
+        </div>
+
         {/* Danger zone — devnet reset */}
-        <div style={{ maxWidth: 720, margin: '40px auto 24px', padding: '16px 20px', border: '1px dashed var(--error)', borderRadius: 'var(--radius)', background: 'rgba(255,107,107,0.04)' }}>
+        <div style={{ maxWidth: 720, margin: '0 auto 24px', padding: '16px 20px', border: '1px dashed var(--error)', borderRadius: 'var(--radius)', background: 'rgba(255,107,107,0.04)' }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--error)', marginBottom: 6 }}>Danger zone</div>
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.6 }}>
             Close this organization on-chain and reset local state. The treasury must be empty (0 balance) — withdraw any remaining funds first. Used during devnet iteration when the treasury is bound to an old mint.

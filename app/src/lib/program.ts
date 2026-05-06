@@ -113,6 +113,13 @@ export function findPayrollRunPda(organizationPda: PublicKey, payrollCount: numb
   )
 }
 
+export function findPausePda(organizationPda: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('pause'), organizationPda.toBuffer()],
+    PROGRAM_ID,
+  )
+}
+
 // ── Instruction helpers ─────────────────────────────────────────────
 
 export async function createOrganization(
@@ -214,6 +221,7 @@ export async function runPayroll(
   const [treasuryPda] = findTreasuryPda(orgPda)
   const [employeePda] = findEmployeePda(orgPda, employeeWallet)
   const [payrollRunPda] = findPayrollRunPda(orgPda, payrollCount)
+  const [pausePda] = findPausePda(orgPda)
   const connection = (program.provider as AnchorProvider).connection
 
   const ataInfo = await connection.getAccountInfo(employeeTokenAccount)
@@ -228,6 +236,7 @@ export async function runPayroll(
       payrollRun: payrollRunPda,
       usdcMint,
       authority,
+      pauseCheck: pausePda,
       systemProgram: SystemProgram.programId,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
@@ -261,6 +270,41 @@ export async function verifyWorldId(
     })
     .transaction()
   return { tx: await sendTx(program, tx) }
+}
+
+export async function pauseOrganization(program: ZalaryProgram, orgPda: PublicKey) {
+  const authority = program.provider.publicKey!
+  const [pausePda] = findPausePda(orgPda)
+  const tx = await (program.methods as any)
+    .pauseOrganization()
+    .accounts({
+      organization: orgPda,
+      pause: pausePda,
+      authority,
+      systemProgram: SystemProgram.programId,
+    })
+    .transaction()
+  return { tx: await sendTx(program, tx) }
+}
+
+export async function resumeOrganization(program: ZalaryProgram, orgPda: PublicKey) {
+  const authority = program.provider.publicKey!
+  const [pausePda] = findPausePda(orgPda)
+  const tx = await (program.methods as any)
+    .resumeOrganization()
+    .accounts({
+      organization: orgPda,
+      pause: pausePda,
+      authority,
+    })
+    .transaction()
+  return { tx: await sendTx(program, tx) }
+}
+
+export async function isOrganizationPaused(program: ZalaryProgram, orgPda: PublicKey): Promise<boolean> {
+  const [pausePda] = findPausePda(orgPda)
+  const info = await (program.provider as AnchorProvider).connection.getAccountInfo(pausePda)
+  return !!info && info.lamports > 0
 }
 
 export async function closeOrganization(

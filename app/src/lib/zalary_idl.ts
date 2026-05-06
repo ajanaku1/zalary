@@ -74,10 +74,32 @@ export const IDL = {
         { name: "payrollRun", writable: true },
         { name: "usdcMint" },
         { name: "authority", writable: true, signer: true },
+        { name: "pauseCheck" },
         { name: "systemProgram" },
         { name: "tokenProgram" },
       ],
       args: [{ name: "amount", type: "u64" }],
+    },
+    {
+      name: "pauseOrganization",
+      discriminator: [157,149,174,224,109,150,45,144],
+      accounts: [
+        { name: "organization" },
+        { name: "pause", writable: true },
+        { name: "authority", writable: true, signer: true },
+        { name: "systemProgram" },
+      ],
+      args: [],
+    },
+    {
+      name: "resumeOrganization",
+      discriminator: [69,180,108,93,249,214,15,1],
+      accounts: [
+        { name: "organization" },
+        { name: "pause", writable: true },
+        { name: "authority", writable: true, signer: true },
+      ],
+      args: [],
     },
     {
       name: "claimFunds",
@@ -132,6 +154,7 @@ export const IDL = {
     { name: "Organization", discriminator: [145,38,152,251,91,57,118,160] },
     { name: "Employee", discriminator: [98,238,61,252,130,77,105,67] },
     { name: "PayrollRun", discriminator: [11,197,215,124,64,255,82,248] },
+    { name: "OrgPause", discriminator: [153,144,73,118,168,103,248,240] },
   ],
   types: [
     {
@@ -190,6 +213,10 @@ export const IDL = {
       },
     },
     {
+      name: "OrgPause",
+      type: { kind: "struct", fields: [] },
+    },
+    {
       name: "PayrollStatus",
       type: {
         kind: "enum",
@@ -212,5 +239,6 @@ export const IDL = {
     { code: 6006, name: "NoActiveEmployees", msg: "No active employees for payroll" },
     { code: 6007, name: "PayrollAlreadyProcessed", msg: "Payroll already processed" },
     { code: 6008, name: "Overflow", msg: "Arithmetic overflow" },
+    { code: 6009, name: "OrganizationPaused", msg: "Organization payroll is paused" },
   ],
 } as const

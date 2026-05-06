@@ -160,6 +160,47 @@ export default function Dashboard() {
   // ALL hooks must be called before any early return (Rules of Hooks)
   const displayOrgName = savedOrgData?.orgName || undefined
   const [treasuryBalance, setTreasuryBalance] = useState(() => savedOrgData?.treasuryAmount || 0)
+
+  // Real on-chain payroll history fetched via program.account.payrollRun.all,
+  // filtered to runs whose `organization` field matches this authority's org PDA.
+  type PayrollRunRow = { pubkey: string; pda: string; amount: number; timestamp: number; initiator: string }
+  const [payrollRuns, setPayrollRuns] = useState<PayrollRunRow[]>([])
+  const [orgTotalDisbursed, setOrgTotalDisbursed] = useState(0)
+  useEffect(() => {
+    if (!program || !walletPublicKey) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [orgPda] = findOrganizationPda(walletPublicKey)
+        const orgAcct = await (program.account as any).organization.fetchNullable(orgPda)
+        if (!orgAcct || cancelled) return
+        setOrgTotalDisbursed(Number(orgAcct.totalDisbursed.toString()) / 1_000_000)
+        const runs = await (program.account as any).payrollRun.all([
+          { memcmp: { offset: 8, bytes: orgPda.toBase58() } }, // first field after discriminator is `organization: Pubkey`
+        ])
+        if (cancelled) return
+        const rows: PayrollRunRow[] = runs
+          .map((r: any) => ({
+            pubkey: r.publicKey.toBase58(),
+            pda: r.publicKey.toBase58(),
+            amount: Number(r.account.totalAmount.toString()) / 1_000_000,
+            timestamp: Number(r.account.timestamp.toString()),
+            initiator: r.account.initiator.toBase58(),
+          }))
+          .sort((a: PayrollRunRow, b: PayrollRunRow) => b.timestamp - a.timestamp)
+        setPayrollRuns(rows)
+      } catch (err) {
+        console.warn('Failed to load payroll history:', err)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [program, walletPublicKey])
+
+  const runsThisMonth = (() => {
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000
+    return payrollRuns.filter(r => r.timestamp >= monthStart).length
+  })()
   const SCHEDULE_LABELS: Record<string, string> = { weekly: 'Weekly', monthly: 'Monthly', biweekly: 'Bi-weekly' }
   const scheduleLabel = SCHEDULE_LABELS[savedOrgData?.schedule ?? 'biweekly'] ?? 'Bi-weekly'
   const nextPayDate = (() => {
@@ -525,25 +566,27 @@ export default function Dashboard() {
                 Run Payroll
               </button>
             </div>
-            {[
-              { id: '#12', date: 'Apr 1, 2026', employees: 24, status: 'Confirmed', tx: '4sGj...kQ7v' },
-              { id: '#11', date: 'Mar 15, 2026', employees: 23, status: 'Confirmed', tx: '7xBn...m9Fp' },
-              { id: '#10', date: 'Mar 1, 2026', employees: 23, status: 'Confirmed', tx: '2kHj...w4Tz' },
-              { id: '#9', date: 'Feb 15, 2026', employees: 22, status: 'Confirmed', tx: '9aLp...q3Xz' },
-              { id: '#8', date: 'Feb 1, 2026', employees: 22, status: 'Confirmed', tx: '5nRk...v8Yd' },
-            ].map((run) => (
-              <div key={run.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <span style={{ fontWeight: 600, fontSize: 15 }}>Payroll {run.id}</span>
-                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{run.date}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{run.employees} employees</span>
-                  <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'rgba(0,184,148,0.12)', color: 'var(--success)', fontWeight: 500 }}>{run.status}</span>
-                  <a href="#" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{run.tx}</a>
-                </div>
+            {payrollRuns.length === 0 ? (
+              <div style={{ padding: '32px 20px', background: 'var(--bg-card)', border: '1px dashed var(--border)', borderRadius: 'var(--radius)', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
+                No payroll runs yet. Run your first payroll to see history here.
               </div>
-            ))}
+            ) : payrollRuns.map((run, idx) => {
+              const date = new Date(run.timestamp * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              const shortPda = `${run.pda.slice(0, 4)}…${run.pda.slice(-4)}`
+              return (
+                <div key={run.pubkey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <span style={{ fontWeight: 600, fontSize: 15 }}>Payroll #{payrollRuns.length - idx}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{date}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <span className="mono" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>${run.amount.toLocaleString()}</span>
+                    <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'rgba(0,184,148,0.12)', color: 'var(--success)', fontWeight: 500 }}>Confirmed</span>
+                    <a href={`https://solscan.io/account/${run.pda}?cluster=devnet`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{shortPda}</a>
+                  </div>
+                </div>
+              )
+            })}
           </div>
           <div className="dash-side">
             <div className="side-section">
@@ -551,11 +594,11 @@ export default function Dashboard() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Total Runs</span>
-                  <span className="mono">12</span>
+                  <span className="mono">{payrollRuns.length}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                   <span style={{ color: 'var(--text-secondary)' }}>This Month</span>
-                  <span className="mono">1</span>
+                  <span className="mono">{runsThisMonth}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Next Scheduled</span>
@@ -600,25 +643,26 @@ export default function Dashboard() {
             </div>
             <div style={{ marginTop: 24 }}>
               <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Transaction History</h3>
-              {[
-                { type: 'Funded', amount: '+50,000 USDC', date: 'Apr 10, 2026', by: 'Owner', tx: '3nBk...q7Xz' },
-                { type: 'Payroll #12', amount: '-87,200 USDC', date: 'Apr 1, 2026', by: 'Admin', tx: '4sGj...kQ7v' },
-                { type: 'Funded', amount: '+100,000 USDC', date: 'Mar 20, 2026', by: 'Owner', tx: '8mFp...v2Ld' },
-                { type: 'Payroll #11', amount: '-84,300 USDC', date: 'Mar 15, 2026', by: 'Admin', tx: '7xBn...m9Fp' },
-                { type: 'Withdrawal', amount: '-25,000 USDC', date: 'Mar 10, 2026', by: 'Owner', tx: '1kHj...w4Tz' },
-              ].map((item, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <span style={{ fontWeight: 500, fontSize: 14 }}>{item.type}</span>
-                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{item.date}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: item.amount.startsWith('+') ? 'var(--success)' : 'var(--text-primary)' }}>{item.amount}</span>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.by}</span>
-                    <a href="#" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{item.tx}</a>
-                  </div>
+              {payrollRuns.length === 0 ? (
+                <div style={{ padding: '32px 20px', background: 'var(--bg-card)', border: '1px dashed var(--border)', borderRadius: 'var(--radius)', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
+                  No transactions yet. Treasury activity will appear here as you fund the vault and run payroll.
                 </div>
-              ))}
+              ) : payrollRuns.map((run) => {
+                const date = new Date(run.timestamp * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                const shortPda = `${run.pda.slice(0, 4)}…${run.pda.slice(-4)}`
+                return (
+                  <div key={run.pubkey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <span style={{ fontWeight: 500, fontSize: 14 }}>Payroll</span>
+                      <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{date}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <span className="mono" style={{ fontSize: 14, fontWeight: 600 }}>−{run.amount.toLocaleString()} USDC</span>
+                      <a href={`https://solscan.io/account/${run.pda}?cluster=devnet`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{shortPda}</a>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
           <div className="dash-side">
@@ -634,39 +678,23 @@ export default function Dashboard() {
                   <span className="mono">USDC</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Total Funded</span>
-                  <span className="mono">$450,000</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Total Disbursed</span>
-                  <span className="mono">$262,500</span>
+                  <span className="mono">${orgTotalDisbursed.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>
             <div className="side-section">
               <h3>Access Roles</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div className="avatar-sm" style={{ width: 24, height: 24, fontSize: 10 }}>AJ</div>
-                    <span>Aisha J.</span>
+                {walletPublicKey && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+                    <span className="mono" style={{ fontSize: 12 }}>{truncateAddress(walletPublicKey.toBase58())}</span>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--accent-subtle)', color: 'var(--accent)' }}>Owner</span>
                   </div>
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--accent-subtle)', color: 'var(--accent)' }}>Owner</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div className="avatar-sm" style={{ width: 24, height: 24, fontSize: 10 }}>MR</div>
-                    <span>Marcus R.</span>
-                  </div>
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--accent-warm-subtle)', color: 'var(--accent-warm)' }}>Admin</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div className="avatar-sm" style={{ width: 24, height: 24, fontSize: 10 }}>LP</div>
-                    <span>Lena P.</span>
-                  </div>
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'rgba(0,184,148,0.12)', color: 'var(--success)' }}>Viewer</span>
-                </div>
+                )}
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                  Multi-sig admin and viewer roles ship in the next release.
+                </p>
               </div>
             </div>
           </div>

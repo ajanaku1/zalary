@@ -133,6 +133,9 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
         if (!orgAccount) throw new Error('Organization not found on-chain. Complete the onboarding flow first.')
 
         let payrollCount = Number(orgAccount.payrollCount)
+        // org.created_at is part of the PayrollRun PDA seed since v3 — guarantees
+        // unique PDAs across org instances if an authority closes + recreates.
+        const createdAt = BigInt(orgAccount.createdAt.toString())
         for (const emp of payableEmployees) {
           const employeeWalletPk = new PublicKey(emp.walletFull)
           const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, employeeWalletPk, false, TOKEN_2022_PROGRAM_ID)
@@ -144,6 +147,7 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
             USDC_MINT,
             Math.round(emp.salary * 1_000_000),
             payrollCount,
+            createdAt,
           )
           lastSig = tx
           payrollCount++
@@ -322,7 +326,7 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
               <h3>All {employees.length} team members have been paid</h3>
-              <p>Payroll #13 completed successfully</p>
+              <p>Payroll completed successfully</p>
               <div className="tx-hash">
                 <span className="mono">{txSignature ? `${txSignature.slice(0, 8)}...${txSignature.slice(-8)}` : 'No signature'}</span>
                 <button className="copy-btn" onClick={copyTxHash} aria-label="Copy transaction hash">

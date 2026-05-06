@@ -104,11 +104,17 @@ export function findEmployeePda(organizationPda: PublicKey, wallet: PublicKey): 
   )
 }
 
-export function findPayrollRunPda(organizationPda: PublicKey, payrollCount: number): [PublicKey, number] {
-  const buf = Buffer.alloc(4)
-  buf.writeUInt32LE(payrollCount)
+export function findPayrollRunPda(
+  organizationPda: PublicKey,
+  payrollCount: number,
+  createdAt: bigint | number,
+): [PublicKey, number] {
+  const createdAtBuf = Buffer.alloc(8)
+  createdAtBuf.writeBigInt64LE(typeof createdAt === 'bigint' ? createdAt : BigInt(createdAt))
+  const countBuf = Buffer.alloc(4)
+  countBuf.writeUInt32LE(payrollCount)
   return PublicKey.findProgramAddressSync(
-    [Buffer.from('payroll'), organizationPda.toBuffer(), buf],
+    [Buffer.from('payroll'), organizationPda.toBuffer(), createdAtBuf, countBuf],
     PROGRAM_ID,
   )
 }
@@ -216,11 +222,12 @@ export async function runPayroll(
   usdcMint: PublicKey,
   amount: number,
   payrollCount: number,
+  createdAt: bigint | number,
 ) {
   const authority = program.provider.publicKey!
   const [treasuryPda] = findTreasuryPda(orgPda)
   const [employeePda] = findEmployeePda(orgPda, employeeWallet)
-  const [payrollRunPda] = findPayrollRunPda(orgPda, payrollCount)
+  const [payrollRunPda] = findPayrollRunPda(orgPda, payrollCount, createdAt)
   const [pausePda] = findPausePda(orgPda)
   const connection = (program.provider as AnchorProvider).connection
 

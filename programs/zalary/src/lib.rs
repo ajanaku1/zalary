@@ -483,7 +483,12 @@ pub struct RunPayroll<'info> {
         init,
         payer = authority,
         space = 8 + PayrollRun::INIT_SPACE,
-        seeds = [b"payroll", organization.key().as_ref(), &organization.payroll_count.to_le_bytes()],
+        seeds = [
+            b"payroll",
+            organization.key().as_ref(),
+            &organization.created_at.to_le_bytes(),
+            &organization.payroll_count.to_le_bytes(),
+        ],
         bump,
     )]
     pub payroll_run: Box<Account<'info, PayrollRun>>,

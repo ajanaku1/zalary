@@ -118,9 +118,13 @@ export const IDL = {
     },
   ],
   accounts: [
+    { name: "Organization", discriminator: [145,38,152,251,91,57,118,160] },
+    { name: "Employee", discriminator: [98,238,61,252,130,77,105,67] },
+    { name: "PayrollRun", discriminator: [11,197,215,124,64,255,82,248] },
+  ],
+  types: [
     {
       name: "Organization",
-      discriminator: [145,38,152,251,91,57,118,160],
       type: {
         kind: "struct",
         fields: [
@@ -137,7 +141,6 @@ export const IDL = {
     },
     {
       name: "Employee",
-      discriminator: [98,238,61,252,130,77,105,67],
       type: {
         kind: "struct",
         fields: [
@@ -155,7 +158,6 @@ export const IDL = {
     },
     {
       name: "PayrollRun",
-      discriminator: [11,197,215,124,64,255,82,248],
       type: {
         kind: "struct",
         fields: [
@@ -169,8 +171,6 @@ export const IDL = {
         ],
       },
     },
-  ],
-  types: [
     {
       name: "EmployeeStatus",
       type: {

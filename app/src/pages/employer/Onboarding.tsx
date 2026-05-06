@@ -119,14 +119,11 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setOrgError(null)
     setTxSignature(null)
     try {
-      if (program) {
-        const { tx } = await createOrgOnChain(program, orgName.trim(), USDC_MINT)
-        setTxSignature(tx)
-      } else {
-        // Privy embedded wallet or no wallet connected — simulate for demo
-        await new Promise(r => setTimeout(r, 1200))
-        setTxSignature('demo_' + Math.random().toString(36).slice(2, 10))
+      if (!program) {
+        throw new Error('Wallet not connected to Solana program. Connect Phantom (or another Solana wallet that exposes signTransaction) and retry.')
       }
+      const { tx } = await createOrgOnChain(program, orgName.trim(), USDC_MINT)
+      setTxSignature(tx)
       setTimeout(() => goToStep(3), 800)
     } catch (err: any) {
       console.error('Create org failed:', err)
@@ -171,23 +168,21 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setFunding(true)
     setFundError(null)
     try {
-      if (program) {
-        const authority = program.provider.publicKey!
-        const [orgPda] = findOrganizationPda(authority)
-        const signerAta = getAssociatedTokenAddressSync(USDC_MINT, authority)
-        const { tx } = await fundTreasuryOnChain(
-          program,
-          orgPda,
-          Math.round(amount * 1_000_000),
-          signerAta,
-          USDC_MINT,
-        )
-        setFundTx(tx)
-        setFunded(true)
-      } else {
-        // Privy embedded wallet or no wallet — simulate for demo
-        setFunded(true)
+      if (!program) {
+        throw new Error('Wallet not connected to Solana program. Reconnect and retry.')
       }
+      const authority = program.provider.publicKey!
+      const [orgPda] = findOrganizationPda(authority)
+      const signerAta = getAssociatedTokenAddressSync(USDC_MINT, authority)
+      const { tx } = await fundTreasuryOnChain(
+        program,
+        orgPda,
+        Math.round(amount * 1_000_000),
+        signerAta,
+        USDC_MINT,
+      )
+      setFundTx(tx)
+      setFunded(true)
     } catch (err: any) {
       setFundError(err?.message || 'Transaction failed')
     } finally {

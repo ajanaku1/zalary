@@ -3,7 +3,7 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { Transaction, SystemProgram, PublicKey } from '@solana/web3.js'
 import { getAssociatedTokenAddressSync } from '@solana/spl-token'
 import { useProgram } from '../../hooks/useProgram'
-import { findOrganizationPda, runPayroll as runPayrollOnChain } from '../../lib/program'
+import { findOrganizationPda, runPayroll as runPayrollOnChain, pollConfirm } from '../../lib/program'
 
 const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
 
@@ -146,7 +146,7 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
             SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: publicKey, lamports: 0 })
           )
           lastSig = await sendTransaction(tx, connection)
-          await connection.confirmTransaction(lastSig, 'confirmed')
+          await pollConfirm(connection, lastSig)
         }
 
         setSigning(false)

@@ -1,7 +1,22 @@
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor'
-import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, type Transaction } from '@solana/web3.js'
+import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, type Connection, type Transaction } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { IDL } from './zalary_idl'
+
+// Poll signature status manually instead of using connection.confirmTransaction,
+// which relies on a WebSocket signatureSubscribe that some RPCs (Helius free tier,
+// public devnet) drop silently — leading to 30s/120s legacy timeouts.
+export async function pollConfirm(connection: Connection, sig: string, timeoutMs = 90_000): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const { value } = await connection.getSignatureStatuses([sig])
+    const status = value[0]
+    if (status?.err) throw new Error(`On-chain failure: ${JSON.stringify(status.err)} (sig: ${sig})`)
+    if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') return
+    await new Promise(r => setTimeout(r, 2000))
+  }
+  throw new Error(`Confirmation timed out after ${timeoutMs / 1000}s. Signature: ${sig}`)
+}
 
 export const PROGRAM_ID = new PublicKey('FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH')
 

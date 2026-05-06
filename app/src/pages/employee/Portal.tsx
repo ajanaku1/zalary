@@ -11,7 +11,7 @@ import TopNav from '../../components/TopNav'
 import { openMoonPaySell } from '../../lib/moonpay'
 import { WORLD_ID_APP_ID, WORLD_ID_ACTION } from '../../lib/worldid'
 import { useProgram } from '../../hooks/useProgram'
-import { verifyWorldId as verifyWorldIdOnChain, findOrganizationPda, claimFunds as claimFundsOnChain } from '../../lib/program'
+import { verifyWorldId as verifyWorldIdOnChain, findOrganizationPda, claimFunds as claimFundsOnChain, pollConfirm } from '../../lib/program'
 
 const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
 
@@ -106,7 +106,7 @@ export default function Portal() {
           SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: publicKey, lamports: 0 })
         )
         const sig = await sendTransaction(tx, connection)
-        await connection.confirmTransaction(sig, 'confirmed')
+        await pollConfirm(connection, sig)
         setClaimTx(sig)
       }
     } catch (err: any) {

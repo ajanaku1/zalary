@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { Transaction, SystemProgram } from '@solana/web3.js'
+import { pollConfirm } from '../../lib/program'
 
 type JoinStep = 'invite' | 'confirm' | 'processing' | 'success' | 'error'
 
@@ -37,7 +38,7 @@ export default function JoinOrg() {
         })
       )
       const sig = await sendTransaction(tx, connection)
-      await connection.confirmTransaction(sig, 'confirmed')
+      await pollConfirm(connection, sig)
       setTxSignature(sig)
       setStep('success')
     } catch (err: unknown) {

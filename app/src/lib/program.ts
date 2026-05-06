@@ -11,7 +11,9 @@ export function getProgram(provider: AnchorProvider): ZalaryProgram {
   return new Program(IDL as any, provider) as unknown as ZalaryProgram
 }
 
-// Uses the block-height confirmation strategy — no hardcoded 30s timeout.
+// Polls getSignatureStatuses + block height instead of relying on WebSocket subscription.
+// Some RPCs (Helius free tier, public devnet) drop signatureSubscribe silently, causing
+// confirmTransaction to hang until its internal timeout regardless of config.
 async function sendTx(program: ZalaryProgram, tx: Transaction): Promise<string> {
   const provider = program.provider as AnchorProvider
   const connection = provider.connection
@@ -19,12 +21,29 @@ async function sendTx(program: ZalaryProgram, tx: Transaction): Promise<string> 
   tx.recentBlockhash = blockhash
   tx.feePayer = provider.publicKey!
   const signed = await provider.wallet.signTransaction(tx)
-  const sig = await connection.sendRawTransaction(signed.serialize(), {
+  const rawTx = signed.serialize()
+
+  const sig = await connection.sendRawTransaction(rawTx, {
     skipPreflight: true,
     maxRetries: 5,
   })
-  await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed')
-  return sig
+
+  // Poll: re-send periodically + check status until confirmed or blockhash expires.
+  while (true) {
+    const { value } = await connection.getSignatureStatuses([sig])
+    const status = value[0]
+    if (status?.err) throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`)
+    if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') {
+      return sig
+    }
+    const currentHeight = await connection.getBlockHeight('confirmed')
+    if (currentHeight > lastValidBlockHeight) {
+      throw new Error(`Transaction expired (blockhash no longer valid). Signature: ${sig}`)
+    }
+    // Re-broadcast in case the leader dropped it.
+    try { await connection.sendRawTransaction(rawTx, { skipPreflight: true, maxRetries: 0 }) } catch {}
+    await new Promise(r => setTimeout(r, 2000))
+  }
 }
 
 // ── PDA helpers ──────────────────────────────────────────────────────

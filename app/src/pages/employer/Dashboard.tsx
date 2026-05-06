@@ -756,6 +756,9 @@ export default function Dashboard() {
         </div>
         )}
 
+        {/* Compliance + safety controls — only relevant on the Team tab */}
+        {activeTab === 'team' && (
+        <>
         {/* Auditor / viewing key — compliance primitive */}
         <div style={{ maxWidth: 720, margin: '40px auto 16px', padding: '16px 20px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-elevated)' }}>
           <div style={{ marginBottom: 10 }}>
@@ -873,6 +876,8 @@ export default function Dashboard() {
           )}
           {resetError && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>{resetError}</div>}
         </div>
+        </>
+        )}
       </main>
 
       <PayrollPanel open={payrollPanelOpen} onClose={closePayrollPanel} employees={employees} onPayrollComplete={handlePayrollComplete} />

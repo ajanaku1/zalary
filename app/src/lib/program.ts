@@ -23,34 +23,47 @@ async function sendTx(program: ZalaryProgram, tx: Transaction): Promise<string> 
   const signed = await provider.wallet.signTransaction(tx)
   const rawTx = signed.serialize()
 
-  // Run a real preflight simulation so program errors (insufficient funds, unauthorized,
-  // PDA mismatch) surface before we burn fees and start polling. Cast through any to
-  // hit the legacy Transaction overload — the typed signatures only accept VersionedTx.
-  const sim = await (connection as any).simulateTransaction(signed)
-  if (sim?.value?.err) {
-    const logs: string[] = sim.value.logs ?? []
-    const programError = logs.find((l: string) => l.includes('Error:') || l.includes('failed:'))
-    throw new Error(programError || `Simulation failed: ${JSON.stringify(sim.value.err)}`)
+  // Send WITH preflight — the RPC runs simulation server-side and returns a clean
+  // SendTransactionError with logs before we ever poll. This is what surfaces
+  // program errors (insufficient funds, unauthorized, PDA mismatch).
+  let sig: string
+  try {
+    sig = await connection.sendRawTransaction(rawTx, {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+      maxRetries: 5,
+    })
+  } catch (err: any) {
+    const logs = err?.logs?.join('\n') || ''
+    const programError = logs.match(/Program log: Error:.*$/m)?.[0] || err?.message || 'Send failed'
+    throw new Error(programError)
   }
 
-  // Preflight passed. Send with skipPreflight=true now (avoid double simulation on the RPC)
-  // and rely on the polling loop below for confirmation.
-  const sig = await connection.sendRawTransaction(rawTx, { skipPreflight: true, maxRetries: 5 })
+  console.log('Tx sent, polling for confirmation:', sig)
 
-  while (true) {
+  // Poll status. Cap at 90s — devnet block-height can be slow to advance and
+  // we want to surface the signature to the user rather than spin silently.
+  const maxAttempts = 45
+  for (let i = 0; i < maxAttempts; i++) {
     const { value } = await connection.getSignatureStatuses([sig])
     const status = value[0]
-    if (status?.err) throw new Error(`Transaction failed on-chain: ${JSON.stringify(status.err)}`)
+    if (status?.err) throw new Error(`On-chain failure: ${JSON.stringify(status.err)} (sig: ${sig})`)
     if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') {
       return sig
     }
-    const currentHeight = await connection.getBlockHeight('confirmed')
-    if (currentHeight > lastValidBlockHeight) {
-      throw new Error(`Transaction expired (blockhash no longer valid). Signature: ${sig}`)
+    try {
+      const currentHeight = await connection.getBlockHeight('confirmed')
+      if (currentHeight > lastValidBlockHeight) {
+        throw new Error(`Blockhash expired before confirmation. Signature: ${sig}`)
+      }
+    } catch { /* getBlockHeight is best-effort, ignore */ }
+    // Re-broadcast once in a while in case the leader dropped it.
+    if (i % 5 === 4) {
+      try { await connection.sendRawTransaction(rawTx, { skipPreflight: true, maxRetries: 0 }) } catch {}
     }
-    try { await connection.sendRawTransaction(rawTx, { skipPreflight: true, maxRetries: 0 }) } catch {}
     await new Promise(r => setTimeout(r, 2000))
   }
+  throw new Error(`Confirmation timed out after 90s. Check signature on Solscan: ${sig}`)
 }
 
 // ── PDA helpers ──────────────────────────────────────────────────────

@@ -38,7 +38,7 @@ async function sendTx(program: ZalaryProgram, tx: Transaction): Promise<string> 
   // found" — the public devnet RPC pool sometimes serves a blockhash from one
   // node that another node hasn't seen yet during preflight. Retrying with a
   // freshly-fetched blockhash from the same RPC almost always resolves it.
-  const signAndSend = async (): Promise<{ sig: string; lastValidBlockHeight: number }> => {
+  const signAndSend = async (): Promise<{ sig: string; lastValidBlockHeight: number; rawTx: Buffer }> => {
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized')
     tx.recentBlockhash = blockhash
     tx.signatures = [] // reset any prior signature from a failed attempt
@@ -49,19 +49,20 @@ async function sendTx(program: ZalaryProgram, tx: Transaction): Promise<string> 
       preflightCommitment: 'confirmed',
       maxRetries: 5,
     })
-    return { sig, lastValidBlockHeight }
+    return { sig, lastValidBlockHeight, rawTx }
   }
 
   let sig: string
   let lastValidBlockHeight: number
+  let rawTx: Buffer
   try {
-    ({ sig, lastValidBlockHeight } = await signAndSend())
+    ({ sig, lastValidBlockHeight, rawTx } = await signAndSend())
   } catch (err: any) {
     const msg = err?.message || ''
     if (msg.includes('Blockhash not found') || msg.includes('blockhash')) {
       console.warn('Blockhash not found on first try, refetching and retrying once...')
       try {
-        ({ sig, lastValidBlockHeight } = await signAndSend())
+        ({ sig, lastValidBlockHeight, rawTx } = await signAndSend())
       } catch (err2: any) {
         const logs = err2?.logs?.join('\n') || ''
         const programError = logs.match(/Program log: Error:.*$/m)?.[0] || err2?.message || 'Send failed'

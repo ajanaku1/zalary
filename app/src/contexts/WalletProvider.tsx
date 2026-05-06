@@ -16,7 +16,7 @@ export default function WalletProvider({ children }: Props) {
       endpoint={connection.rpcEndpoint}
       config={{ commitment: 'confirmed', confirmTransactionInitialTimeout: 120_000 }}
     >
-      <SolanaWalletProvider wallets={wallets} autoConnect={false}>
+      <SolanaWalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
           {children}
         </WalletModalProvider>

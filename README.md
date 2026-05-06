@@ -37,7 +37,7 @@ The current build encrypts salary client-side with AES-256-GCM as a placeholder.
 |---|---|
 | Blockchain | Solana (devnet, mainnet planned post-hackathon) |
 | Smart contracts | Anchor (Rust) |
-| Privacy | Token-2022 confidential transfers (in migration) |
+| Privacy | Token-2022 with ConfidentialTransfer extension (mint live, ZK transfer path WIP) |
 | Frontend | React, TypeScript, Vite |
 | Wallet | Phantom via `@solana/wallet-adapter` |
 | Onboarding | Privy (social login for non-crypto employees) |
@@ -64,6 +64,8 @@ Instructions:
 - `update_salary(new_encrypted_salary)` — update salary on-chain
 - `verify_world_id(nullifier_hash)` — store proof, mark employee verified
 - `withdraw_treasury(amount)` — employer pulls from vault
+- `pause_organization` / `resume_organization` — on-chain payroll kill switch via `OrgPause` PDA
+- `close_organization` — close org and treasury, refund rent (treasury must be empty)
 
 ---
 
@@ -124,9 +126,12 @@ Zalary/
 
 ## Honest status (as of submission window)
 
-- AES-256-GCM client-side encryption is a placeholder. The Token-2022 confidential-transfer migration is the production privacy path and is the headline work for the final cut.
-- World ID verification is wired into the program (`verify_world_id` stores the proof on the employee PDA). The current demo flow does not gate `claim_funds` on `world_id_verified` so reviewers can test without a World App. The hard gate ships with the mainnet build.
-- Building the program locally requires the full Solana toolchain (`solana-cli` + `cargo-build-sbf`). The deployed devnet binary was built in a clean Anchor 0.30.1 environment. `proc-macro2` is pinned to `=1.0.94` in `programs/zalary/Cargo.toml` to prevent the macro-expansion break that hits anchor-syn 0.30.x with newer proc-macro2 releases.
+- The on-chain program is built on `anchor_spl::token_interface`, so it accepts both classic SPL Token mints and Token-2022 mints transparently. zUSDC (`AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD`) is a Token-2022 mint with the `ConfidentialTransferMint` extension enabled (auto-approve mode). All treasury and employee ATAs are Token-2022 ATAs.
+- Current transfers use `TransferChecked` against the Token-2022 program. The actual ZK-proven `ConfidentialTransfer::Transfer` instruction (ElGamal-encrypted amounts, range proofs in the browser) is the next migration phase. Mint and accounts are already configured to support it; only the client-side proof generation and the program-side instruction switch are pending.
+- The AES-256-GCM client-side blob on the Employee PDA is a structural placeholder, not a security boundary.
+- World ID verification stores proofs on the employee PDA via `verify_world_id`. Demo flow gates `claim_funds` client-side; the program-side hard gate ships with mainnet.
+- Pause / resume payroll is live on-chain via a separate `OrgPause` PDA. `run_payroll` rejects with `OrganizationPaused` (6009) while paused.
+- Building locally requires the full Solana toolchain (`solana-cli` + `cargo-build-sbf`).
 
 ---
 

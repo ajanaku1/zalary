@@ -1,6 +1,6 @@
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor'
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, type Connection, type Transaction } from '@solana/web3.js'
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
+import { TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token'
 import { IDL } from './zalary_idl'
 
 // Poll signature status manually instead of using connection.confirmTransaction,
@@ -171,6 +171,14 @@ export async function fundTreasury(
 ) {
   const funder = program.provider.publicKey!
   const [treasuryPda] = findTreasuryPda(orgPda)
+  const connection = (program.provider as AnchorProvider).connection
+
+  // If the funder's USDC ATA doesn't exist yet, create it in the same tx so the
+  // FundTreasury instruction has something to spend from. Idempotent — no-op if
+  // the account is already there. Will not magically give the user USDC, but it
+  // turns "AccountNotInitialized" into a clean "insufficient funds" if they
+  // genuinely have no balance.
+  const ataInfo = await connection.getAccountInfo(signerTokenAccount)
 
   const tx = await (program.methods as any)
     .fundTreasury(new BN(amount))
@@ -183,6 +191,13 @@ export async function fundTreasury(
       tokenProgram: TOKEN_PROGRAM_ID,
     })
     .transaction()
+
+  if (!ataInfo) {
+    tx.instructions.unshift(
+      createAssociatedTokenAccountIdempotentInstruction(funder, signerTokenAccount, funder, usdcMint),
+    )
+  }
+
   return { tx: await sendTx(program, tx) }
 }
 

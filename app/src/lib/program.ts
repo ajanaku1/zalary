@@ -214,6 +214,9 @@ export async function runPayroll(
   const [treasuryPda] = findTreasuryPda(orgPda)
   const [employeePda] = findEmployeePda(orgPda, employeeWallet)
   const [payrollRunPda] = findPayrollRunPda(orgPda, payrollCount)
+  const connection = (program.provider as AnchorProvider).connection
+
+  const ataInfo = await connection.getAccountInfo(employeeTokenAccount)
 
   const tx = await (program.methods as any)
     .runPayroll(new BN(amount))
@@ -229,6 +232,15 @@ export async function runPayroll(
       tokenProgram: TOKEN_PROGRAM_ID,
     })
     .transaction()
+
+  // If the employee's USDC ATA doesn't exist yet, create it first so RunPayroll
+  // has a valid destination. The employer (authority) pays the rent.
+  if (!ataInfo) {
+    tx.instructions.unshift(
+      createAssociatedTokenAccountIdempotentInstruction(authority, employeeTokenAccount, employeeWallet, usdcMint),
+    )
+  }
+
   return { tx: await sendTx(program, tx), payrollRunPda }
 }
 

@@ -30,6 +30,8 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
   const [confettiDots, setConfettiDots] = useState<Array<{ id: number; left: string; color: string; delay: string; duration: string; size: string }>>([])
   const [txSignature, setTxSignature] = useState<string | null>(null)
   const [txError, setTxError] = useState<string | null>(null)
+  const [signing, setSigning] = useState(false)
+  const [txConfirmed, setTxConfirmed] = useState(false)
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const { publicKey, sendTransaction } = useWallet()
   const { connection } = useConnection()
@@ -48,37 +50,6 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
       size: (4 + Math.random() * 4) + 'px',
     }))
     setConfettiDots(dots)
-  }, [])
-
-  const runProcessingAnimation = useCallback(() => {
-    timersRef.current.forEach(t => clearTimeout(t))
-    timersRef.current = []
-
-    setPhaseStates(['idle', 'idle', 'idle'])
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const delay = reduced ? 50 : 1200
-
-    const t1 = setTimeout(() => {
-      setPhaseStates(['active', 'idle', 'idle'])
-    }, 200)
-
-    const t2 = setTimeout(() => {
-      setPhaseStates(['done', 'active', 'idle'])
-    }, delay + 200)
-
-    const t3 = setTimeout(() => {
-      setPhaseStates(['done', 'done', 'active'])
-    }, delay * 2 + 200)
-
-    const t4 = setTimeout(() => {
-      setPhaseStates(['done', 'done', 'done'])
-      const t5 = setTimeout(() => {
-        setPayrollStep(4)
-      }, 500)
-      timersRef.current.push(t5)
-    }, delay * 3 + 200)
-
-    timersRef.current.push(t1, t2, t3, t4)
   }, [])
 
   // Reset state when panel opens
@@ -129,9 +100,6 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
       timersRef.current.forEach(t => clearTimeout(t))
     }
   }, [])
-
-  const [signing, setSigning] = useState(false)
-  const [txConfirmed, setTxConfirmed] = useState(false)
 
   const advancePayroll = useCallback(async () => {
     if (payrollStep === 2 && !confirmChecked) return

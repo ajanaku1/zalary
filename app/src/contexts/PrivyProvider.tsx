@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { PrivyProvider as PrivySDKProvider } from '@privy-io/react-auth'
 import { PRIVY_APP_ID } from '../lib/privy'
 
@@ -14,7 +14,7 @@ export default function PrivyProvider({ children }: { children: ReactNode }) {
         },
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
-        },
+        } as any,
       }}
     >
       {children}

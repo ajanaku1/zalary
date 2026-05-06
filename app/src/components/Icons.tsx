@@ -5,15 +5,6 @@ interface IconProps {
   size?: number;
 }
 
-const icon = (
-  paths: (props: IconProps) => JSX.Element,
-  displayName: string
-): FC<IconProps> => {
-  const Component: FC<IconProps> = (props) => paths(props);
-  Component.displayName = displayName;
-  return Component;
-};
-
 export const ShieldIcon: FC<IconProps> = ({ className, size = 20 }) => (
   <svg
     width={size}

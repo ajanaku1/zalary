@@ -58,11 +58,13 @@ export default function Portal() {
     return {
       app_id: WORLD_ID_APP_ID as `app_${string}`,
       action: WORLD_ID_ACTION,
+      allow_legacy_proofs: false,
       rp_context: {
         rp_id: WORLD_ID_APP_ID,
         nonce: crypto.randomUUID(),
         created_at: ts,
         expires_at: ts + 3600,
+        signature: '',
       },
       preset: deviceLegacy({ signal: 'verify-employee' }),
     }
@@ -269,6 +271,7 @@ export default function Portal() {
                 Verify Identity
               </button>
               <IDKitRequestWidget
+                {...idkitConfig}
                 {...idkitRequest}
                 open={widgetOpen}
                 onOpenChange={setWidgetOpen}

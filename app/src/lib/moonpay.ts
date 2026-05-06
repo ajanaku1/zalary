@@ -3,7 +3,7 @@ import { loadMoonPay } from '@moonpay/moonpay-js'
 const MOONPAY_API_KEY = import.meta.env.VITE_MOONPAY_API_KEY || ''
 const MOONPAY_ENV = (import.meta.env.VITE_MOONPAY_ENV || 'sandbox') as 'sandbox' | 'production'
 
-let moonPayInstance: ReturnType<Awaited<ReturnType<typeof loadMoonPay>>> | null = null
+let moonPayInstance: ReturnType<NonNullable<Awaited<ReturnType<typeof loadMoonPay>>>> | null = null
 
 export async function openMoonPaySell(quoteCurrencyCode: string = 'usd') {
   if (!MOONPAY_API_KEY) {

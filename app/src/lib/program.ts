@@ -5,10 +5,11 @@ import { IDL } from './zalary_idl'
 
 export const PROGRAM_ID = new PublicKey('FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH')
 
-export type ZalaryProgram = Program<typeof IDL>
+export type ZalaryProgram = Program<any>
 
 export function getProgram(provider: AnchorProvider): ZalaryProgram {
-  return new Program(IDL as any, PROGRAM_ID, provider) as unknown as ZalaryProgram
+  const idl = { ...IDL, address: PROGRAM_ID.toBase58() } as any
+  return new Program(idl, provider) as unknown as ZalaryProgram
 }
 
 // ── PDA helpers ──────────────────────────────────────────────────────

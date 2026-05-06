@@ -20,7 +20,7 @@ export interface EncryptedAmount {
 async function deriveKey(salt: Uint8Array): Promise<CryptoKey> {
   const baseKey = await crypto.subtle.importKey(
     'raw',
-    salt,
+    salt.buffer as ArrayBuffer,
     'HKDF',
     false,
     ['deriveBits', 'deriveKey'],

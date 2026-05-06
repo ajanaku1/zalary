@@ -7,11 +7,11 @@ interface AuthGateProps {
   onAuth: () => void
 }
 
-export default function AuthGate({ onAuth }: AuthGateProps) {
+export default function AuthGate({ onAuth: _onAuth }: AuthGateProps) {
   const [mode, setMode] = useState<'signin' | 'create'>('signin')
   const { connected, wallet, connect } = useWallet()
   const { setVisible } = useWalletModal()
-  const { ready, authenticated, login } = usePrivy()
+  const { ready, login } = usePrivy()
 
   const handleConnect = () => setVisible(true)
 

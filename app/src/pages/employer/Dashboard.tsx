@@ -11,7 +11,7 @@ import Onboarding from './Onboarding'
 import { useRole } from '../../contexts/RoleContext'
 import { useProgram } from '../../hooks/useProgram'
 import { createOrganization, addEmployee, closeOrganization as closeOrganizationOnChain, pauseOrganization as pauseOrganizationOnChain, resumeOrganization as resumeOrganizationOnChain, isOrganizationPaused, findOrganizationPda, findTreasuryPda } from '../../lib/program'
-import { encryptSalary } from '../../lib/arcium'
+import { encryptSalary } from '../../lib/salary_crypto'
 import { AVATAR_COLORS, deriveInitials, truncateAddress } from '../../lib/utils'
 import type { Employee } from './EmployeeDetail'
 

@@ -33,11 +33,11 @@ Stores the employee's wallet, encrypted salary (64-byte blob), World ID verifica
 **PayrollRun** — `[b"payroll", org_pda, payroll_count_le_bytes]`  
 Immutable log of each run: who initiated it, how many employees, total amount, timestamp.
 
-### Salary encryption
+### Salary privacy
 
-`app/src/lib/arcium.ts` implements AES-256-GCM encryption of salary amounts client-side. The employer encrypts `salary_usdc` with a key derived from their wallet signature before sending it to the chain. The ciphertext (64 bytes) is stored in the Employee account.
+The on-chain zUSDC mint (`AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD`) is a Token-2022 mint with the `ConfidentialTransferMint` extension enabled (auto-approve mode). Treasury and employee ATAs are Token-2022 ATAs ready to participate in confidential transfers, where balances are stored as ElGamal commitments and transfer amounts are proven via ZK range proofs.
 
-In a production version, this would run through Arcium's MPC cluster so even the employer's device never sees the plaintext during payroll execution. For the hackathon, the client-side version demonstrates the data model correctly.
+Current transfers use `TransferChecked` (Token-2022's standard transfer) — the plumbing is in place but ZK transfers are pending. `app/src/lib/salary_crypto.ts` carries an AES blob on the Employee PDA as a structural placeholder so the data model matches the production swap-in.
 
 ### Identity verification
 
@@ -65,7 +65,7 @@ Auth: Phantom wallet via `@solana/wallet-adapter` for on-chain signers; Privy fo
 
 ## Sponsor integrations
 
-**Arcium** — salary encryption model (AES-256-GCM placeholder, production path is CSPL MPC). Encrypted salary ciphertext stored in Employee PDA.
+**Token-2022 ConfidentialTransfer** — zUSDC mint enabled with the extension (auto-approve). Treasury and employee ATAs are Token-2022 accounts. Migration to ZK-proven `ConfidentialTransfer::Transfer` is the next sprint; the on-chain primitive is configured.
 
 **World ID** — `verify_world_id` instruction + IDKit v4 frontend widget. Nullifier hash stored on-chain to prevent double-verification.
 
@@ -93,7 +93,7 @@ Auth: Phantom wallet via `@solana/wallet-adapter` for on-chain signers; Privy fo
 
 ## Stuff that's stubbed
 
-**Arcium MPC cluster** — the encryption runs client-side. Real Arcium CSPL integration needs their MPC network which isn't publicly available yet. The data model (64-byte ciphertext in Employee PDA) is designed to swap in without breaking the contract.
+**ZK-proven confidential transfers** — the mint is enabled with `ConfidentialTransferMint` and accounts are ready, but the actual transfers we send are still `TransferChecked` (amounts visible). Wiring `ConfidentialTransfer::Transfer` requires ZK proof generation in the browser via `@solana/zk-token-sdk`; that's the next migration step. The data model already matches.
 
 **World ID claim gating** — `verify_world_id` stores the proof but the `claim_funds` instruction doesn't require `world_id_verified == true` in the demo build. Easy to add as a constraint check.
 

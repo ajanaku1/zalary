@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { PublicKey } from '@solana/web3.js'
-import { encryptSalary, decryptSalary } from '../../lib/arcium'
+import { encryptSalary, decryptSalary } from '../../lib/salary_crypto'
 import { useProgram } from '../../hooks/useProgram'
 import { findOrganizationPda, updateSalary as updateSalaryOnChain } from '../../lib/program'
 

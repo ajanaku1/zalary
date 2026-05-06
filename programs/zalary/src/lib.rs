@@ -111,7 +111,8 @@ pub mod zalary {
     }
 
     /// Run payroll — transfers USDC from treasury to an employee's token account.
-    /// In production this would batch via Arcium confidential transfers.
+    /// Production path migrates this to Token-2022 ConfidentialTransfer with
+    /// ElGamal-encrypted amounts and ZK range proofs.
     /// For the hackathon demo, call this per-employee and it creates a PayrollRun record.
     pub fn run_payroll(
         ctx: Context<RunPayroll>,

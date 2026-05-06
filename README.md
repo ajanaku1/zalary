@@ -27,7 +27,7 @@ Why now: Solana shipped Token-2022 confidential transfers in 2024, and the audit
 5. Identity check. World ID gates payroll claims to verified humans. The nullifier hash is stored on the employee PDA so a person can't double-claim across wallets.
 6. Off-ramp. After claiming, employees convert USDC to local currency through the MoonPay sell widget. NGN, INR, BRL, KES, ARS, USD, EUR. No separate exchange account.
 
-The current build encrypts salary client-side with AES-256-GCM as a placeholder. The full Token-2022 confidential-transfer migration is in progress and is the headline technical work for the final submission.
+The current build encrypts the salary blob client-side with AES-256-GCM as a structural placeholder. The Token-2022 ConfidentialTransfer migration (mint already configured for it) is the production privacy path.
 
 ---
 
@@ -101,7 +101,7 @@ Zalary/
 │   │   │   └── employee/   # Portal (balance, claim, World ID, MoonPay)
 │   │   ├── lib/
 │   │   │   ├── program.ts  # Anchor instruction helpers + PDA finders
-│   │   │   ├── arcium.ts   # Salary encryption (placeholder)
+│   │   │   ├── salary_crypto.ts  # Salary blob encryption (placeholder, replaced by Token-2022 ConfidentialTransfer)
 │   │   │   └── worldid.ts  # World ID config
 │   │   └── hooks/
 │   │       └── useProgram.ts

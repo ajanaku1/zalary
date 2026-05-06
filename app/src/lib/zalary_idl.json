@@ -1,0 +1,211 @@
+{
+  "version": "0.1.0",
+  "name": "zalary",
+  "instructions": [
+    {
+      "name": "createOrganization",
+      "accounts": [
+        { "name": "organization", "isMut": true, "isSigner": false },
+        { "name": "treasury", "isMut": true, "isSigner": false },
+        { "name": "usdcMint", "isMut": false, "isSigner": false },
+        { "name": "authority", "isMut": true, "isSigner": true },
+        { "name": "systemProgram", "isMut": false, "isSigner": false },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false },
+        { "name": "rent", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "name", "type": "string" }
+      ]
+    },
+    {
+      "name": "addEmployee",
+      "accounts": [
+        { "name": "organization", "isMut": true, "isSigner": false },
+        { "name": "employee", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": true, "isSigner": true },
+        { "name": "systemProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "wallet", "type": "publicKey" },
+        { "name": "encryptedSalary", "type": { "array": ["u8", 64] } }
+      ]
+    },
+    {
+      "name": "removeEmployee",
+      "accounts": [
+        { "name": "organization", "isMut": true, "isSigner": false },
+        { "name": "employee", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true }
+      ],
+      "args": []
+    },
+    {
+      "name": "updateSalary",
+      "accounts": [
+        { "name": "organization", "isMut": false, "isSigner": false },
+        { "name": "employee", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true }
+      ],
+      "args": [
+        { "name": "newEncryptedSalary", "type": { "array": ["u8", 64] } }
+      ]
+    },
+    {
+      "name": "fundTreasury",
+      "accounts": [
+        { "name": "organization", "isMut": false, "isSigner": false },
+        { "name": "treasury", "isMut": true, "isSigner": false },
+        { "name": "funderTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "usdcMint", "isMut": false, "isSigner": false },
+        { "name": "funder", "isMut": true, "isSigner": true },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "amount", "type": "u64" }
+      ]
+    },
+    {
+      "name": "runPayroll",
+      "accounts": [
+        { "name": "organization", "isMut": true, "isSigner": false },
+        { "name": "treasury", "isMut": true, "isSigner": false },
+        { "name": "employee", "isMut": true, "isSigner": false },
+        { "name": "employeeTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "payrollRun", "isMut": true, "isSigner": false },
+        { "name": "usdcMint", "isMut": false, "isSigner": false },
+        { "name": "authority", "isMut": true, "isSigner": true },
+        { "name": "systemProgram", "isMut": false, "isSigner": false },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "amount", "type": "u64" }
+      ]
+    },
+    {
+      "name": "claimFunds",
+      "accounts": [
+        { "name": "organization", "isMut": false, "isSigner": false },
+        { "name": "employee", "isMut": false, "isSigner": false },
+        { "name": "escrowTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "claimerTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "usdcMint", "isMut": false, "isSigner": false },
+        { "name": "claimer", "isMut": true, "isSigner": true },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "amount", "type": "u64" }
+      ]
+    },
+    {
+      "name": "verifyWorldId",
+      "accounts": [
+        { "name": "organization", "isMut": false, "isSigner": false },
+        { "name": "employee", "isMut": true, "isSigner": false },
+        { "name": "claimer", "isMut": false, "isSigner": true }
+      ],
+      "args": [
+        { "name": "nullifierHash", "type": { "array": ["u8", 32] } }
+      ]
+    },
+    {
+      "name": "withdrawTreasury",
+      "accounts": [
+        { "name": "organization", "isMut": false, "isSigner": false },
+        { "name": "treasury", "isMut": true, "isSigner": false },
+        { "name": "authorityTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "usdcMint", "isMut": false, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "amount", "type": "u64" }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Organization",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "authority", "type": "publicKey" },
+          { "name": "name", "type": "string" },
+          { "name": "treasury", "type": "publicKey" },
+          { "name": "employeeCount", "type": "u32" },
+          { "name": "totalDisbursed", "type": "u64" },
+          { "name": "payrollCount", "type": "u32" },
+          { "name": "createdAt", "type": "i64" },
+          { "name": "bump", "type": "u8" }
+        ]
+      }
+    },
+    {
+      "name": "Employee",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "organization", "type": "publicKey" },
+          { "name": "wallet", "type": "publicKey" },
+          { "name": "encryptedSalary", "type": { "array": ["u8", 64] } },
+          { "name": "status", "type": { "defined": "EmployeeStatus" } },
+          { "name": "worldIdVerified", "type": "bool" },
+          { "name": "nullifierHash", "type": { "array": ["u8", 32] } },
+          { "name": "addedAt", "type": "i64" },
+          { "name": "lastPaidAt", "type": "i64" },
+          { "name": "bump", "type": "u8" }
+        ]
+      }
+    },
+    {
+      "name": "PayrollRun",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "organization", "type": "publicKey" },
+          { "name": "initiator", "type": "publicKey" },
+          { "name": "employeeCount", "type": "u32" },
+          { "name": "totalAmount", "type": "u64" },
+          { "name": "timestamp", "type": "i64" },
+          { "name": "status", "type": { "defined": "PayrollStatus" } },
+          { "name": "bump", "type": "u8" }
+        ]
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "EmployeeStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          { "name": "Active" },
+          { "name": "Pending" },
+          { "name": "Inactive" }
+        ]
+      }
+    },
+    {
+      "name": "PayrollStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          { "name": "Pending" },
+          { "name": "Processing" },
+          { "name": "Confirmed" },
+          { "name": "Failed" }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    { "code": 6000, "name": "Unauthorized", "msg": "You are not authorized to perform this action" },
+    { "code": 6001, "name": "NameTooLong", "msg": "Organization name too long (max 64 characters)" },
+    { "code": 6002, "name": "EmployeeNotActive", "msg": "Employee is not active" },
+    { "code": 6003, "name": "EmployeeAlreadyActive", "msg": "Employee is already active" },
+    { "code": 6004, "name": "InsufficientFunds", "msg": "Insufficient funds in treasury" },
+    { "code": 6005, "name": "InvalidAmount", "msg": "Invalid amount" },
+    { "code": 6006, "name": "NoActiveEmployees", "msg": "No active employees for payroll" },
+    { "code": 6007, "name": "PayrollAlreadyProcessed", "msg": "Payroll already processed" },
+    { "code": 6008, "name": "Overflow", "msg": "Arithmetic overflow" }
+  ]
+}

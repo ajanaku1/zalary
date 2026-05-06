@@ -1,5 +1,5 @@
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor'
-import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from '@solana/web3.js'
+import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, type Transaction } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { IDL } from './zalary_idl'
 
@@ -9,6 +9,22 @@ export type ZalaryProgram = Program<any>
 
 export function getProgram(provider: AnchorProvider): ZalaryProgram {
   return new Program(IDL as any, provider) as unknown as ZalaryProgram
+}
+
+// Uses the block-height confirmation strategy — no hardcoded 30s timeout.
+async function sendTx(program: ZalaryProgram, tx: Transaction): Promise<string> {
+  const provider = program.provider as AnchorProvider
+  const connection = provider.connection
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+  tx.recentBlockhash = blockhash
+  tx.feePayer = provider.publicKey!
+  const signed = await provider.wallet.signTransaction(tx)
+  const sig = await connection.sendRawTransaction(signed.serialize(), {
+    skipPreflight: true,
+    maxRetries: 5,
+  })
+  await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed')
+  return sig
 }
 
 // ── PDA helpers ──────────────────────────────────────────────────────
@@ -65,9 +81,9 @@ export async function createOrganization(
       tokenProgram: TOKEN_PROGRAM_ID,
       rent: SYSVAR_RENT_PUBKEY,
     })
-    .rpc({ skipPreflight: true, commitment: 'confirmed' })
-
-  return { tx, organizationPda, treasuryPda }
+    .transaction()
+  const sig = await sendTx(program, tx)
+  return { tx: sig, organizationPda, treasuryPda }
 }
 
 export async function addEmployee(
@@ -87,9 +103,9 @@ export async function addEmployee(
       authority,
       systemProgram: SystemProgram.programId,
     })
-    .rpc({ skipPreflight: true, commitment: 'confirmed' })
-
-  return { tx, employeePda }
+    .transaction()
+  const sig = await sendTx(program, tx)
+  return { tx: sig, employeePda }
 }
 
 export async function fundTreasury(
@@ -112,9 +128,8 @@ export async function fundTreasury(
       funder,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .rpc({ skipPreflight: true, commitment: 'confirmed' })
-
-  return { tx }
+    .transaction()
+  return { tx: await sendTx(program, tx) }
 }
 
 export async function runPayroll(
@@ -144,9 +159,8 @@ export async function runPayroll(
       systemProgram: SystemProgram.programId,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .rpc({ skipPreflight: true, commitment: 'confirmed' })
-
-  return { tx, payrollRunPda }
+    .transaction()
+  return { tx: await sendTx(program, tx), payrollRunPda }
 }
 
 export async function verifyWorldId(
@@ -164,9 +178,8 @@ export async function verifyWorldId(
       employee: employeePda,
       claimer,
     })
-    .rpc({ skipPreflight: true, commitment: 'confirmed' })
-
-  return { tx }
+    .transaction()
+  return { tx: await sendTx(program, tx) }
 }
 
 export async function withdrawTreasury(
@@ -189,9 +202,8 @@ export async function withdrawTreasury(
       authority,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .rpc({ skipPreflight: true, commitment: 'confirmed' })
-
-  return { tx }
+    .transaction()
+  return { tx: await sendTx(program, tx) }
 }
 
 export async function updateSalary(
@@ -210,9 +222,8 @@ export async function updateSalary(
       employee: employeePda,
       authority,
     })
-    .rpc({ skipPreflight: true, commitment: 'confirmed' })
-
-  return { tx }
+    .transaction()
+  return { tx: await sendTx(program, tx) }
 }
 
 export async function claimFunds(
@@ -237,7 +248,6 @@ export async function claimFunds(
       claimer,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .rpc({ skipPreflight: true, commitment: 'confirmed' })
-
-  return { tx }
+    .transaction()
+  return { tx: await sendTx(program, tx) }
 }

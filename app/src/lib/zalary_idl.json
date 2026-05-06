@@ -1,17 +1,18 @@
 {
-  "version": "0.1.0",
-  "name": "zalary",
+  "address": "FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH",
+  "metadata": { "name": "zalary", "version": "0.1.0", "spec": "0.1.0" },
   "instructions": [
     {
       "name": "createOrganization",
+      "discriminator": [60,173,177,39,122,23,68,185],
       "accounts": [
-        { "name": "organization", "isMut": true, "isSigner": false },
-        { "name": "treasury", "isMut": true, "isSigner": false },
-        { "name": "usdcMint", "isMut": false, "isSigner": false },
-        { "name": "authority", "isMut": true, "isSigner": true },
-        { "name": "systemProgram", "isMut": false, "isSigner": false },
-        { "name": "tokenProgram", "isMut": false, "isSigner": false },
-        { "name": "rent", "isMut": false, "isSigner": false }
+        { "name": "organization", "writable": true },
+        { "name": "treasury", "writable": true },
+        { "name": "usdcMint" },
+        { "name": "authority", "writable": true, "signer": true },
+        { "name": "systemProgram" },
+        { "name": "tokenProgram" },
+        { "name": "rent" }
       ],
       "args": [
         { "name": "name", "type": "string" }
@@ -19,32 +20,35 @@
     },
     {
       "name": "addEmployee",
+      "discriminator": [14,82,239,156,50,90,189,61],
       "accounts": [
-        { "name": "organization", "isMut": true, "isSigner": false },
-        { "name": "employee", "isMut": true, "isSigner": false },
-        { "name": "authority", "isMut": true, "isSigner": true },
-        { "name": "systemProgram", "isMut": false, "isSigner": false }
+        { "name": "organization", "writable": true },
+        { "name": "employee", "writable": true },
+        { "name": "authority", "writable": true, "signer": true },
+        { "name": "systemProgram" }
       ],
       "args": [
-        { "name": "wallet", "type": "publicKey" },
+        { "name": "wallet", "type": "pubkey" },
         { "name": "encryptedSalary", "type": { "array": ["u8", 64] } }
       ]
     },
     {
       "name": "removeEmployee",
+      "discriminator": [16,10,234,98,224,29,67,64],
       "accounts": [
-        { "name": "organization", "isMut": true, "isSigner": false },
-        { "name": "employee", "isMut": true, "isSigner": false },
-        { "name": "authority", "isMut": false, "isSigner": true }
+        { "name": "organization", "writable": true },
+        { "name": "employee", "writable": true },
+        { "name": "authority", "signer": true }
       ],
       "args": []
     },
     {
       "name": "updateSalary",
+      "discriminator": [201,74,241,234,152,230,48,234],
       "accounts": [
-        { "name": "organization", "isMut": false, "isSigner": false },
-        { "name": "employee", "isMut": true, "isSigner": false },
-        { "name": "authority", "isMut": false, "isSigner": true }
+        { "name": "organization" },
+        { "name": "employee", "writable": true },
+        { "name": "authority", "signer": true }
       ],
       "args": [
         { "name": "newEncryptedSalary", "type": { "array": ["u8", 64] } }
@@ -52,13 +56,14 @@
     },
     {
       "name": "fundTreasury",
+      "discriminator": [71,154,45,220,206,32,174,239],
       "accounts": [
-        { "name": "organization", "isMut": false, "isSigner": false },
-        { "name": "treasury", "isMut": true, "isSigner": false },
-        { "name": "funderTokenAccount", "isMut": true, "isSigner": false },
-        { "name": "usdcMint", "isMut": false, "isSigner": false },
-        { "name": "funder", "isMut": true, "isSigner": true },
-        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+        { "name": "organization" },
+        { "name": "treasury", "writable": true },
+        { "name": "funderTokenAccount", "writable": true },
+        { "name": "usdcMint" },
+        { "name": "funder", "writable": true, "signer": true },
+        { "name": "tokenProgram" }
       ],
       "args": [
         { "name": "amount", "type": "u64" }
@@ -66,16 +71,17 @@
     },
     {
       "name": "runPayroll",
+      "discriminator": [224,128,206,1,134,16,133,5],
       "accounts": [
-        { "name": "organization", "isMut": true, "isSigner": false },
-        { "name": "treasury", "isMut": true, "isSigner": false },
-        { "name": "employee", "isMut": true, "isSigner": false },
-        { "name": "employeeTokenAccount", "isMut": true, "isSigner": false },
-        { "name": "payrollRun", "isMut": true, "isSigner": false },
-        { "name": "usdcMint", "isMut": false, "isSigner": false },
-        { "name": "authority", "isMut": true, "isSigner": true },
-        { "name": "systemProgram", "isMut": false, "isSigner": false },
-        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+        { "name": "organization", "writable": true },
+        { "name": "treasury", "writable": true },
+        { "name": "employee", "writable": true },
+        { "name": "employeeTokenAccount", "writable": true },
+        { "name": "payrollRun", "writable": true },
+        { "name": "usdcMint" },
+        { "name": "authority", "writable": true, "signer": true },
+        { "name": "systemProgram" },
+        { "name": "tokenProgram" }
       ],
       "args": [
         { "name": "amount", "type": "u64" }
@@ -83,14 +89,15 @@
     },
     {
       "name": "claimFunds",
+      "discriminator": [145,36,143,242,168,66,200,155],
       "accounts": [
-        { "name": "organization", "isMut": false, "isSigner": false },
-        { "name": "employee", "isMut": false, "isSigner": false },
-        { "name": "escrowTokenAccount", "isMut": true, "isSigner": false },
-        { "name": "claimerTokenAccount", "isMut": true, "isSigner": false },
-        { "name": "usdcMint", "isMut": false, "isSigner": false },
-        { "name": "claimer", "isMut": true, "isSigner": true },
-        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+        { "name": "organization" },
+        { "name": "employee" },
+        { "name": "escrowTokenAccount", "writable": true },
+        { "name": "claimerTokenAccount", "writable": true },
+        { "name": "usdcMint" },
+        { "name": "claimer", "writable": true, "signer": true },
+        { "name": "tokenProgram" }
       ],
       "args": [
         { "name": "amount", "type": "u64" }
@@ -98,10 +105,11 @@
     },
     {
       "name": "verifyWorldId",
+      "discriminator": [215,9,170,36,225,31,35,175],
       "accounts": [
-        { "name": "organization", "isMut": false, "isSigner": false },
-        { "name": "employee", "isMut": true, "isSigner": false },
-        { "name": "claimer", "isMut": false, "isSigner": true }
+        { "name": "organization" },
+        { "name": "employee", "writable": true },
+        { "name": "claimer", "signer": true }
       ],
       "args": [
         { "name": "nullifierHash", "type": { "array": ["u8", 32] } }
@@ -109,13 +117,14 @@
     },
     {
       "name": "withdrawTreasury",
+      "discriminator": [40,63,122,158,144,216,83,96],
       "accounts": [
-        { "name": "organization", "isMut": false, "isSigner": false },
-        { "name": "treasury", "isMut": true, "isSigner": false },
-        { "name": "authorityTokenAccount", "isMut": true, "isSigner": false },
-        { "name": "usdcMint", "isMut": false, "isSigner": false },
-        { "name": "authority", "isMut": false, "isSigner": true },
-        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+        { "name": "organization" },
+        { "name": "treasury", "writable": true },
+        { "name": "authorityTokenAccount", "writable": true },
+        { "name": "usdcMint" },
+        { "name": "authority", "signer": true },
+        { "name": "tokenProgram" }
       ],
       "args": [
         { "name": "amount", "type": "u64" }
@@ -125,12 +134,13 @@
   "accounts": [
     {
       "name": "Organization",
+      "discriminator": [145,38,152,251,91,57,118,160],
       "type": {
         "kind": "struct",
         "fields": [
-          { "name": "authority", "type": "publicKey" },
+          { "name": "authority", "type": "pubkey" },
           { "name": "name", "type": "string" },
-          { "name": "treasury", "type": "publicKey" },
+          { "name": "treasury", "type": "pubkey" },
           { "name": "employeeCount", "type": "u32" },
           { "name": "totalDisbursed", "type": "u64" },
           { "name": "payrollCount", "type": "u32" },
@@ -141,13 +151,14 @@
     },
     {
       "name": "Employee",
+      "discriminator": [98,238,61,252,130,77,105,67],
       "type": {
         "kind": "struct",
         "fields": [
-          { "name": "organization", "type": "publicKey" },
-          { "name": "wallet", "type": "publicKey" },
+          { "name": "organization", "type": "pubkey" },
+          { "name": "wallet", "type": "pubkey" },
           { "name": "encryptedSalary", "type": { "array": ["u8", 64] } },
-          { "name": "status", "type": { "defined": "EmployeeStatus" } },
+          { "name": "status", "type": { "defined": { "name": "EmployeeStatus" } } },
           { "name": "worldIdVerified", "type": "bool" },
           { "name": "nullifierHash", "type": { "array": ["u8", 32] } },
           { "name": "addedAt", "type": "i64" },
@@ -158,15 +169,16 @@
     },
     {
       "name": "PayrollRun",
+      "discriminator": [11,197,215,124,64,255,82,248],
       "type": {
         "kind": "struct",
         "fields": [
-          { "name": "organization", "type": "publicKey" },
-          { "name": "initiator", "type": "publicKey" },
+          { "name": "organization", "type": "pubkey" },
+          { "name": "initiator", "type": "pubkey" },
           { "name": "employeeCount", "type": "u32" },
           { "name": "totalAmount", "type": "u64" },
           { "name": "timestamp", "type": "i64" },
-          { "name": "status", "type": { "defined": "PayrollStatus" } },
+          { "name": "status", "type": { "defined": { "name": "PayrollStatus" } } },
           { "name": "bump", "type": "u8" }
         ]
       }

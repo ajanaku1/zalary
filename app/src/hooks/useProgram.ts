@@ -10,9 +10,13 @@ export function useProgram(): ZalaryProgram | null {
 
   return useMemo(() => {
     if (!wallet) return null
-    const provider = new AnchorProvider(connection, wallet, {
-      commitment: 'confirmed',
-    })
-    return getProgram(provider)
+    try {
+      const provider = new AnchorProvider(connection, wallet, {
+        commitment: 'confirmed',
+      })
+      return getProgram(provider)
+    } catch {
+      return null
+    }
   }, [connection, wallet])
 }

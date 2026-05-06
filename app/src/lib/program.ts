@@ -1,6 +1,6 @@
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor'
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, type Connection, type Transaction } from '@solana/web3.js'
-import { TOKEN_2022_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token'
+import { TOKEN_2022_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync } from '@solana/spl-token'
 import { IDL } from './zalary_idl'
 
 // Poll signature status manually instead of using connection.confirmTransaction,
@@ -310,11 +310,20 @@ export async function isOrganizationPaused(program: ZalaryProgram, orgPda: Publi
 export async function closeOrganization(
   program: ZalaryProgram,
   orgPda: PublicKey,
+  usdcMint: PublicKey,
 ) {
   const authority = program.provider.publicKey!
   const [treasuryPda] = findTreasuryPda(orgPda)
+  const connection = (program.provider as AnchorProvider).connection
 
-  const tx = await (program.methods as any)
+  // Read treasury balance — close_account in the SPL token program rejects any
+  // non-empty token account. If there's a balance, drain it back to the
+  // authority's ATA in the same tx before closing. Auto-create that ATA if it
+  // doesn't exist yet (e.g. authority funded via a different wallet originally).
+  const balanceInfo = await connection.getTokenAccountBalance(treasuryPda).catch(() => null)
+  const balance = balanceInfo ? Number(balanceInfo.value.amount) : 0
+
+  const closeTx = await (program.methods as any)
     .closeOrganization()
     .accounts({
       organization: orgPda,
@@ -323,7 +332,35 @@ export async function closeOrganization(
       tokenProgram: TOKEN_2022_PROGRAM_ID,
     })
     .transaction()
-  return { tx: await sendTx(program, tx) }
+
+  if (balance > 0) {
+    const authorityAta = getAssociatedTokenAddressSync(usdcMint, authority, false, TOKEN_2022_PROGRAM_ID)
+    const ataInfo = await connection.getAccountInfo(authorityAta)
+    const withdrawTx = await (program.methods as any)
+      .withdrawTreasury(new BN(balance))
+      .accounts({
+        organization: orgPda,
+        treasury: treasuryPda,
+        authorityTokenAccount: authorityAta,
+        usdcMint,
+        authority,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .transaction()
+
+    if (!ataInfo) {
+      closeTx.instructions.unshift(
+        createAssociatedTokenAccountIdempotentInstruction(
+          authority, authorityAta, authority, usdcMint, TOKEN_2022_PROGRAM_ID,
+        ),
+        ...withdrawTx.instructions,
+      )
+    } else {
+      closeTx.instructions.unshift(...withdrawTx.instructions)
+    }
+  }
+
+  return { tx: await sendTx(program, closeTx) }
 }
 
 export async function withdrawTreasury(

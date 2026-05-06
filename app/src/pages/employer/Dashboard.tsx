@@ -112,7 +112,7 @@ export default function Dashboard() {
     try {
       const authority = program.provider.publicKey!
       const [orgPda] = findOrganizationPda(authority)
-      await closeOrganizationOnChain(program, orgPda)
+      await closeOrganizationOnChain(program, orgPda, USDC_MINT)
       localStorage.removeItem('zalary_onboarded')
       localStorage.removeItem('zalary_org_data')
       localStorage.removeItem('zalary_org_authority')

@@ -310,18 +310,26 @@ export async function isOrganizationPaused(program: ZalaryProgram, orgPda: Publi
 export async function closeOrganization(
   program: ZalaryProgram,
   orgPda: PublicKey,
-  usdcMint: PublicKey,
+  _usdcMintHint: PublicKey,
 ) {
   const authority = program.provider.publicKey!
   const [treasuryPda] = findTreasuryPda(orgPda)
   const connection = (program.provider as AnchorProvider).connection
 
-  // Read treasury balance — close_account in the SPL token program rejects any
-  // non-empty token account. If there's a balance, drain it back to the
-  // authority's ATA in the same tx before closing. Auto-create that ATA if it
-  // doesn't exist yet (e.g. authority funded via a different wallet originally).
-  const balanceInfo = await connection.getTokenAccountBalance(treasuryPda).catch(() => null)
-  const balance = balanceInfo ? Number(balanceInfo.value.amount) : 0
+  // Read the treasury's actual mint + token program from on-chain rather than
+  // trusting the frontend hint. Old orgs were created with the legacy SPL
+  // mint; new orgs use Token-2022. The withdraw_treasury constraint compares
+  // the passed usdc_mint to the treasury's stored mint, so using the wrong
+  // one here surfaces as ConstraintTokenMint (2014).
+  const parsed = await connection.getParsedAccountInfo(treasuryPda)
+  const accountInfo = parsed.value
+  if (!accountInfo) throw new Error('Treasury account not found on-chain.')
+  const data = accountInfo.data as any
+  const actualMintStr = data?.parsed?.info?.mint as string | undefined
+  if (!actualMintStr) throw new Error('Could not parse treasury mint.')
+  const actualMint = new PublicKey(actualMintStr)
+  const actualTokenProgram = accountInfo.owner // SPL Token or Token-2022
+  const balance = Number(data?.parsed?.info?.tokenAmount?.amount || 0)
 
   const closeTx = await (program.methods as any)
     .closeOrganization()
@@ -329,12 +337,12 @@ export async function closeOrganization(
       organization: orgPda,
       treasury: treasuryPda,
       authority,
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
+      tokenProgram: actualTokenProgram,
     })
     .transaction()
 
   if (balance > 0) {
-    const authorityAta = getAssociatedTokenAddressSync(usdcMint, authority, false, TOKEN_2022_PROGRAM_ID)
+    const authorityAta = getAssociatedTokenAddressSync(actualMint, authority, false, actualTokenProgram)
     const ataInfo = await connection.getAccountInfo(authorityAta)
     const withdrawTx = await (program.methods as any)
       .withdrawTreasury(new BN(balance))
@@ -342,22 +350,22 @@ export async function closeOrganization(
         organization: orgPda,
         treasury: treasuryPda,
         authorityTokenAccount: authorityAta,
-        usdcMint,
+        usdcMint: actualMint,
         authority,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        tokenProgram: actualTokenProgram,
       })
       .transaction()
 
+    const prepended: any[] = []
     if (!ataInfo) {
-      closeTx.instructions.unshift(
+      prepended.push(
         createAssociatedTokenAccountIdempotentInstruction(
-          authority, authorityAta, authority, usdcMint, TOKEN_2022_PROGRAM_ID,
+          authority, authorityAta, authority, actualMint, actualTokenProgram,
         ),
-        ...withdrawTx.instructions,
       )
-    } else {
-      closeTx.instructions.unshift(...withdrawTx.instructions)
     }
+    prepended.push(...withdrawTx.instructions)
+    closeTx.instructions.unshift(...prepended)
   }
 
   return { tx: await sendTx(program, closeTx) }

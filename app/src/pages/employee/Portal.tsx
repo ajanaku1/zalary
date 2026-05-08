@@ -8,6 +8,7 @@ import { useIDKitRequest, IDKitRequestWidget } from '@worldcoin/idkit'
 import { deviceLegacy } from '@worldcoin/idkit-core'
 import type { IDKitResult } from '@worldcoin/idkit-core'
 import TopNav from '../../components/TopNav'
+import PrivyClaimCard from './PrivyClaimCard'
 import { openMoonPaySell } from '../../lib/moonpay'
 import { WORLD_ID_APP_ID, WORLD_ID_ACTION } from '../../lib/worldid'
 import { useProgram } from '../../hooks/useProgram'
@@ -215,6 +216,9 @@ export default function Portal() {
       <TopNav variant="employee" />
 
       <main>
+      <div style={{ padding: '0 20px' }}>
+        <PrivyClaimCard />
+      </div>
       {/* Authenticated header bar — sits inside <main> so it inherits the
           padding-top: 64px that clears the fixed TopNav. Previously rendered
           outside main and got buried under the nav, making Verify Identity

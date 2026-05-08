@@ -214,7 +214,11 @@ export default function Portal() {
     <div className="screen active">
       <TopNav variant="employee" />
 
-      {/* Authenticated header bar */}
+      <main>
+      {/* Authenticated header bar — sits inside <main> so it inherits the
+          padding-top: 64px that clears the fixed TopNav. Previously rendered
+          outside main and got buried under the nav, making Verify Identity
+          unclickable. */}
       <div style={{ padding: '0 20px', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -285,7 +289,6 @@ export default function Portal() {
         </div>
       </div>
 
-      <main>
         <div className="employee-portal">
           {/* Balance Card */}
           <div className="balance-card-wrapper">

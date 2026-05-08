@@ -1,19 +1,18 @@
-// Employer Insights — metadata-only analytics. No salary plaintext on this page.
+// Employer Insights — metadata-only analytics, direct RPC.
 //
-// Honors PRIVACY.md: queries Covalent (or RPC fallback) for txs touching the
-// org treasury PDA, then derives counts, cadence, and inflow sources. Amounts
-// are intentionally absent — pre-migration the visible-amount path is a
-// distraction from the privacy story; post-migration the amounts are
-// ElGamal ciphertext that no indexer (Covalent included) can read.
+// No third-party indexer in the loop. The browser asks Helius RPC for txs
+// touching the org treasury PDA, derives counts and cadence locally, and
+// renders. No analytics provider gets to log "this wallet asked about that
+// PDA at that time." That's the whole point of running a privacy product.
+//
+// Amounts are intentionally absent — pre-migration the visible-amount path is
+// a distraction from the privacy story; post-migration the amounts are
+// ElGamal ciphertext that no indexer can read.
 
 import { useEffect, useMemo, useState } from 'react'
 import { PublicKey } from '@solana/web3.js'
 import { findOrganizationPda, findTreasuryPda } from '../../lib/program'
-import { getProgramTxsForWallet, getDemoMode, getShowcaseWalletSol, getShowcaseWalletEvm, type ProgramTx } from '../../lib/covalent'
-import { getTreasuryBalanceHistory, isPortfolioAvailable, type BalancePoint } from '../../lib/covalent-balances'
-import { getMultiFiat, isPricingAvailable, type FiatQuote, type FiatCode } from '../../lib/covalent-pricing'
-import { getCrossChainStables, getSolUsdPrice, isMultichainAvailable, type CrossChainBalance } from '../../lib/covalent-multichain'
-import AnalyticsBanner from '../../components/AnalyticsBanner'
+import { getProgramTxsForWallet, type ProgramTx } from '../../lib/program-activity'
 import { useHeliusLogStream } from '../../hooks/useHeliusLogStream'
 
 interface Props {
@@ -22,18 +21,12 @@ interface Props {
 
 export default function InsightsPanel({ authority }: Props) {
   const [txs, setTxs] = useState<ProgramTx[]>([])
-  const [history, setHistory] = useState<BalancePoint[]>([])
-  const [fiat, setFiat] = useState<FiatQuote[]>([])
-  const [crossChain, setCrossChain] = useState<CrossChainBalance[]>([])
-  const [solUsd, setSolUsd] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [demoOn, setDemoOn] = useState(getDemoMode())
   const liveEvent = useHeliusLogStream(true)
 
-  // Real-time refresh: when a Zalary tx lands and it touched the treasury,
-  // refetch Covalent rather than waiting for a manual reload. Push, not poll.
+  // Live refresh: when a Zalary tx lands and it touched the treasury, refetch.
   useEffect(() => {
     if (liveEvent && liveEvent.instructions.some(i => i === 'runPayroll' || i === 'fundTreasury' || i === 'claimFunds')) {
       setReloadKey(k => k + 1)
@@ -49,30 +42,8 @@ export default function InsightsPanel({ authority }: Props) {
       try {
         const [orgPda] = findOrganizationPda(authority)
         const [treasuryPda] = findTreasuryPda(orgPda)
-
-        // In demo mode, swap the queried Solana wallet for the configured
-        // mainnet showcase wallet so Covalent returns real data instead of
-        // empty cards. EVM cross-chain wallet has its own override.
-        const showcaseSol = getShowcaseWalletSol()
-        const showcaseEvm = getShowcaseWalletEvm()
-        const queriedSolPda = demoOn && showcaseSol ? new PublicKey(showcaseSol) : treasuryPda
-        const queriedEvm = demoOn && showcaseEvm ? showcaseEvm : authority.toBase58()
-        const queriedSolForChain = demoOn && showcaseSol ? showcaseSol : authority.toBase58()
-
-        const [fetched, hist, quotes, xchain, sol] = await Promise.all([
-          getProgramTxsForWallet(queriedSolPda, 200),
-          isPortfolioAvailable() ? getTreasuryBalanceHistory(queriedSolPda).catch(() => []) : Promise.resolve([]),
-          isPricingAvailable() ? getMultiFiat().catch(() => []) : Promise.resolve([]),
-          isMultichainAvailable() ? getCrossChainStables(queriedEvm, queriedSolForChain).catch(() => []) : Promise.resolve([]),
-          isMultichainAvailable() ? getSolUsdPrice().catch(() => null) : Promise.resolve(null),
-        ])
-        if (!cancelled) {
-          setTxs(fetched)
-          setHistory(hist)
-          setFiat(quotes)
-          setCrossChain(xchain)
-          setSolUsd(sol)
-        }
+        const fetched = await getProgramTxsForWallet(treasuryPda, 200)
+        if (!cancelled) setTxs(fetched)
       } catch (err: unknown) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load insights')
       } finally {
@@ -94,16 +65,6 @@ export default function InsightsPanel({ authority }: Props) {
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
-      <AnalyticsBanner
-        onChange={() => setReloadKey(k => k + 1)}
-        onDemoChange={(on) => { setDemoOn(on); setReloadKey(k => k + 1) }}
-      />
-      {demoOn && (
-        <div style={{ padding: '8px 12px', background: 'var(--accent)', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 600, textAlign: 'center' }}>
-          Showcase data — Covalent panels below show a mainnet wallet, not your devnet treasury
-        </div>
-      )}
-
       {/* Hero — total treasury activity */}
       <div className="balance-card-wrapper">
         <div className="balance-card-inner">
@@ -135,11 +96,6 @@ export default function InsightsPanel({ authority }: Props) {
         <div className="stat-card">
           <div className="stat-label">Total fees</div>
           <div className="stat-value">{(stats.feeLamports / 1e9).toFixed(4)} SOL</div>
-          {solUsd && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-              ≈ ${((stats.feeLamports / 1e9) * solUsd).toFixed(2)} <span style={{ opacity: 0.6 }}>· Covalent</span>
-            </div>
-          )}
         </div>
       </div>
 
@@ -149,59 +105,11 @@ export default function InsightsPanel({ authority }: Props) {
         <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           Treasury balance and per-payroll amounts move into Token-2022 ConfidentialTransfer
           ciphertext on mainnet. This dashboard reports the public metadata graph — counts,
-          timestamps, fees — but never reads or guesses the dollar value behind a tx. For the
-          actual treasury balance, see the Treasury tab (your wallet decrypts it locally).
+          timestamps, fees — and nothing else. We don't proxy through any analytics indexer
+          because routing your queries through one would build the behavioural profile we
+          built Zalary to avoid.
         </p>
       </div>
-
-      {/* Treasury balance trail (Covalent Portfolio v2) */}
-      {history.length > 0 && (
-        <div className="treasury-card">
-          <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>
-            Treasury USDC · 30d
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 400 }}>via Covalent Portfolio v2</span>
-          </h3>
-          <BalanceSparkline points={history} />
-        </div>
-      )}
-
-      {/* Cross-chain treasury preview (Covalent Multichain) */}
-      {crossChain.length > 0 && (
-        <div className="treasury-card">
-          <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>
-            Cross-chain stablecoin holdings
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 400 }}>via Covalent Multichain · so you know whether to bridge before payroll</span>
-          </h3>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {crossChain.map((b, i) => (
-              <div key={`${b.chain}-${i}`} style={{ display: 'grid', gridTemplateColumns: '110px 60px 1fr 100px', alignItems: 'center', gap: 12, fontSize: 13 }}>
-                <span style={{ color: 'var(--text-secondary)' }}>{b.chain}</span>
-                <span className="mono" style={{ color: 'var(--text-muted)' }}>{b.symbol}</span>
-                <span className="mono" style={{ textAlign: 'right' }}>{b.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                <span className="mono" style={{ textAlign: 'right', color: 'var(--text-muted)' }}>${b.quote.toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Fiat tile (Covalent Pricing) */}
-      {fiat.length > 0 && (
-        <div className="treasury-card">
-          <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>
-            1 USDC in fiat
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 400 }}>via Covalent Pricing · for receipts only, never on-chain</span>
-          </h3>
-          <div className="quick-stats">
-            {fiat.map(q => (
-              <div className="stat-card" key={q.currency}>
-                <div className="stat-label">{q.currency}</div>
-                <div className="stat-value">{formatFiat(q.pricePerUsdc, q.currency)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Cadence */}
       <div className="treasury-card">
@@ -268,45 +176,6 @@ function deriveStats(txs: ProgramTx[]): Stats {
     funders: funders.size,
     feeLamports,
     byMonth,
-  }
-}
-
-function BalanceSparkline({ points }: { points: BalancePoint[] }) {
-  const w = 600, h = 120, pad = 8
-  const max = Math.max(...points.map(p => p.balance), 1)
-  const min = Math.min(...points.map(p => p.balance), 0)
-  const range = max - min || 1
-  const path = points.map((p, i) => {
-    const x = pad + (i / Math.max(points.length - 1, 1)) * (w - pad * 2)
-    const y = h - pad - ((p.balance - min) / range) * (h - pad * 2)
-    return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
-  }).join(' ')
-  const last = points[points.length - 1]
-  return (
-    <div>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 120, display: 'block' }}>
-        <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2" />
-        <path d={`${path} L ${w - pad} ${h - pad} L ${pad} ${h - pad} Z`} fill="url(#g)" opacity="0.18" />
-        <defs>
-          <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent)" />
-            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-        <span>{points[0]?.date}</span>
-        <span className="mono">{last?.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC · {last?.date}</span>
-      </div>
-    </div>
-  )
-}
-
-function formatFiat(price: number, currency: FiatCode): string {
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 2 }).format(price)
-  } catch {
-    return price.toFixed(2)
   }
 }
 

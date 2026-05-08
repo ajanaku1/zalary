@@ -15,8 +15,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import TopNav from '../../components/TopNav'
-import { getProgramTxsForWallet, type ProgramTx } from '../../lib/covalent'
-import AnalyticsBanner from '../../components/AnalyticsBanner'
+import { getProgramTxsForWallet, type ProgramTx } from '../../lib/program-activity'
 import { fetchEnhancedTransactions, decodeZalaryInstructions, isHeliusEnhancedAvailable } from '../../lib/helius-enhanced'
 
 const SOLSCAN = (sig: string) => `https://solscan.io/tx/${sig}?cluster=devnet`
@@ -40,7 +39,6 @@ export default function IncomeHistory() {
   const [labels, setLabels] = useState<Record<string, string[]>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     if (!connected || !publicKey) return
@@ -74,7 +72,7 @@ export default function IncomeHistory() {
       }
     })()
     return () => { cancelled = true }
-  }, [connected, publicKey, reloadKey])
+  }, [connected, publicKey])
 
   const successes = useMemo(() => txs.filter(t => t.success), [txs])
   const monthCount = useMemo(() => {
@@ -101,7 +99,6 @@ export default function IncomeHistory() {
     <div className="screen active">
       <TopNav variant="employee" />
       <main style={wrap}>
-        <AnalyticsBanner onChange={() => setReloadKey(k => k + 1)} />
 
         {/* Hero — program activity count, not income */}
         <div className="balance-card-wrapper">

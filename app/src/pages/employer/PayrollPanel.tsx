@@ -4,6 +4,7 @@ import { PublicKey } from '@solana/web3.js'
 import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token'
 import { useProgram } from '../../hooks/useProgram'
 import { findOrganizationPda, runPayroll as runPayrollOnChain } from '../../lib/program'
+import WalletName from '../../components/WalletName'
 
 const USDC_MINT = new PublicKey('AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD')
 
@@ -246,7 +247,7 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
                   <div className="avatar-sm" style={{ background: emp.bg, color: emp.color, width: 32, height: 32, fontSize: 12 }}>{emp.initials}</div>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 500 }}>{emp.name}</div>
-                    <div className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{emp.wallet}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}><WalletName wallet={emp.walletFull || emp.wallet} /></div>
                   </div>
                   <div className="conf-badge">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>

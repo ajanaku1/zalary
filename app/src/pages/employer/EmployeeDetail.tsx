@@ -3,6 +3,7 @@ import { PublicKey } from '@solana/web3.js'
 import { encryptSalary, decryptSalary } from '../../lib/salary_crypto'
 import { useProgram } from '../../hooks/useProgram'
 import { findOrganizationPda, updateSalary as updateSalaryOnChain } from '../../lib/program'
+import WalletName from '../../components/WalletName'
 
 export interface Employee {
   initials: string
@@ -115,7 +116,7 @@ export default function EmployeeDetail({ open, onClose, employee, onSalarySet, o
             </div>
             <div>
               <div style={{ fontSize: 18, fontWeight: 600 }}>{employee.name}</div>
-              <div className="mono" style={{ fontSize: 13, color: 'var(--text-muted)' }}>{employee.wallet}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}><WalletName wallet={employee.walletFull || employee.wallet} showAvatar /></div>
             </div>
           </div>
 

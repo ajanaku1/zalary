@@ -14,6 +14,7 @@ import { useProgram } from '../../hooks/useProgram'
 import { createOrganization, addEmployee, closeOrganization as closeOrganizationOnChain, pauseOrganization as pauseOrganizationOnChain, resumeOrganization as resumeOrganizationOnChain, isOrganizationPaused, setAuditor as setAuditorOnChain, clearAuditor as clearAuditorOnChain, getAuditor, findOrganizationPda, findTreasuryPda } from '../../lib/program'
 import { encryptSalary } from '../../lib/salary_crypto'
 import { AVATAR_COLORS, deriveInitials, truncateAddress } from '../../lib/utils'
+import WalletName from '../../components/WalletName'
 import type { Employee } from './EmployeeDetail'
 
 // Devnet USDC mint address
@@ -483,7 +484,7 @@ export default function Dashboard() {
                   <div className="overlay">View Details</div>
                   <div className="emp-top">
                     <div className="emp-avatar" style={{ background: emp.bg, color: emp.color }}>{emp.initials}</div>
-                    <div><div className="emp-name">{emp.name}</div><div className="emp-wallet mono">{emp.wallet}</div></div>
+                    <div><div className="emp-name">{emp.name}</div><div className="emp-wallet"><WalletName wallet={emp.walletFull || emp.wallet} /></div></div>
                   </div>
                   <div className="emp-bottom">
                     <div className="emp-salary">
@@ -631,7 +632,7 @@ export default function Dashboard() {
                   <div className="overlay">View Details</div>
                   <div className="emp-top">
                     <div className="emp-avatar" style={{ background: emp.bg, color: emp.color }}>{emp.initials}</div>
-                    <div><div className="emp-name">{emp.name}</div><div className="emp-wallet mono">{emp.wallet}</div></div>
+                    <div><div className="emp-name">{emp.name}</div><div className="emp-wallet"><WalletName wallet={emp.walletFull || emp.wallet} /></div></div>
                   </div>
                   <div className="emp-bottom">
                     <div className="emp-salary">
@@ -816,7 +817,7 @@ export default function Dashboard() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {walletPublicKey && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-                    <span className="mono" style={{ fontSize: 12 }}>{truncateAddress(walletPublicKey.toBase58())}</span>
+                    <span style={{ fontSize: 12 }}><WalletName wallet={walletPublicKey} /></span>
                     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--accent-subtle)', color: 'var(--accent)' }}>Owner</span>
                   </div>
                 )}

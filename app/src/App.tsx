@@ -6,10 +6,12 @@ import IncomeHistory from './pages/employee/IncomeHistory'
 import JoinOrg from './pages/employee/JoinOrg'
 import ScreenNav from './components/ScreenNav'
 import HeliusLiveBanner from './components/HeliusLiveBanner'
+import DemoBanner from './components/DemoBanner'
 
 export default function App() {
   return (
     <>
+      <DemoBanner />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/employer" element={<Dashboard />} />

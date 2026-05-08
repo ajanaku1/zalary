@@ -9,6 +9,7 @@ import EmployeeDetail from './EmployeeDetail'
 import AuthGate from './AuthGate'
 import Onboarding from './Onboarding'
 import InsightsPanel from './InsightsPanel'
+import { useDemoMode } from '../../hooks/useDemoMode'
 import { useRole } from '../../contexts/RoleContext'
 import { useProgram } from '../../hooks/useProgram'
 import { createOrganization, addEmployee, closeOrganization as closeOrganizationOnChain, pauseOrganization as pauseOrganizationOnChain, resumeOrganization as resumeOrganizationOnChain, isOrganizationPaused, setAuditor as setAuditorOnChain, clearAuditor as clearAuditorOnChain, getAuditor, findOrganizationPda, findTreasuryPda } from '../../lib/program'
@@ -31,7 +32,13 @@ interface OrgData {
 
 export default function Dashboard() {
   // Auth state
-  const { connected, publicKey: walletPublicKey } = useWallet()
+  const { connected, publicKey: connectedWalletPubkey } = useWallet()
+  const { isDemo, demoAuthority } = useDemoMode()
+  // In tour mode, every read-side query targets the seeded demo org. The
+  // visitor's connected wallet (if any) is still used to instantiate the
+  // Anchor program, but the org and employee accounts come from the demo
+  // authority. Write actions are disabled below.
+  const walletPublicKey = isDemo && demoAuthority ? demoAuthority : connectedWalletPubkey
   const { connection } = useConnection()
   const { ready, authenticated } = usePrivy()
   const isLoggedIn = connected || (ready && authenticated)
@@ -576,11 +583,23 @@ export default function Dashboard() {
             <div className="side-section">
               <h3>Quick Actions</h3>
               <div className="quick-actions">
-                <button className="qa-btn primary-action" onClick={openPayrollPanel}>
+                <button
+                  className="qa-btn primary-action"
+                  onClick={openPayrollPanel}
+                  disabled={isDemo}
+                  title={isDemo ? 'Tour mode is read-only. Sign in to run payroll.' : undefined}
+                  style={isDemo ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
                   Run Payroll
                 </button>
-                <button className="qa-btn secondary-action" onClick={openAddEmployee}>
+                <button
+                  className="qa-btn secondary-action"
+                  onClick={openAddEmployee}
+                  disabled={isDemo}
+                  title={isDemo ? 'Tour mode is read-only. Sign in to add employees.' : undefined}
+                  style={isDemo ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
                   Add Employee
                 </button>

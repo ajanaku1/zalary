@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import TopNav from '../components/TopNav'
+import { isDemoConfigured } from '../hooks/useDemoMode'
 
 export default function Landing() {
   const navigate = useNavigate()
@@ -44,6 +45,15 @@ export default function Landing() {
                 Employee Login
               </button>
             </div>
+            {isDemoConfigured() && (
+              <div style={{ marginTop: 16, fontSize: 13, color: 'var(--text-muted)' }}>
+                Or take the tour:
+                {' '}<a href="/employer?demo=1" style={{ color: 'var(--accent)' }}>employer view</a>
+                {' · '}
+                <a href="/employee?demo=1" style={{ color: 'var(--accent)' }}>employee view</a>
+                {' '}— read-only, no sign-in needed.
+              </div>
+            )}
           </div>
           <div className="hero-right">
             {/* Card 1: Back - Employee Balance */}

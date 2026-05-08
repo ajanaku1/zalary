@@ -44,6 +44,13 @@ export function isCovalentAvailable(): boolean {
   return Boolean(API_KEY) && NETWORK !== 'devnet'
 }
 
+// True if a Covalent API key is set, regardless of network. Used by the demo-
+// mode row in the analytics banner — that row exists precisely because Zalary
+// is on devnet, so it must not be gated behind a mainnet check.
+export function hasCovalentKey(): boolean {
+  return Boolean(API_KEY)
+}
+
 // Demo-mode toggle. When ON and a showcase wallet is configured, Insights
 // queries Covalent against the showcase wallet so the integration shows real
 // mainnet activity. UI must surface a "Demo data" badge so this isn't

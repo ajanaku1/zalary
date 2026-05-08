@@ -15,6 +15,7 @@ import {
   getAnalyticsMode,
   setAnalyticsMode,
   isCovalentAvailable,
+  hasCovalentKey,
   getDemoMode,
   setDemoMode,
   isShowcaseAvailable,
@@ -30,6 +31,7 @@ export default function AnalyticsBanner({ onChange, onDemoChange }: Props) {
   const [mode, setMode] = useState<AnalyticsMode>(getAnalyticsMode())
   const [demoOn, setDemoOn] = useState<boolean>(getDemoMode())
   const covalentReady = isCovalentAvailable()
+  const apiKeySet = hasCovalentKey()
   const showcaseReady = isShowcaseAvailable()
 
   const toggleSource = () => {
@@ -62,12 +64,17 @@ export default function AnalyticsBanner({ onChange, onDemoChange }: Props) {
           {mode === 'covalent' ? 'Switch to RPC' : 'Switch to Covalent'}
         </button>
       </div>
-      {covalentReady && (
+      {/* Demo-mode row. Always visible when a Covalent key is set, regardless
+          of network — the whole point is that Zalary runs on devnet but
+          Covalent indexes mainnet, so this is the bridge. */}
+      {apiKeySet && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', borderTop: '1px solid rgba(108,92,231,0.18)', paddingTop: 8, marginTop: 4 }}>
           <span>
             {demoOn
               ? <>Demo mode: <strong style={{ color: 'var(--accent)' }}>showing mainnet showcase wallet</strong>. Your devnet treasury is hidden.</>
-              : <>Zalary runs on devnet. Toggle demo mode to populate the Covalent surfaces with mainnet showcase data.</>}
+              : showcaseReady
+                ? <>Zalary runs on devnet. Toggle demo mode to populate the Covalent surfaces with mainnet showcase data.</>
+                : <>Showcase wallet not configured. Set <code>VITE_DEMO_SHOWCASE_WALLET_SOL</code> to enable demo mode.</>}
           </span>
           <button
             onClick={toggleDemo}

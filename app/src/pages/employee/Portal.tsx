@@ -1,16 +1,13 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { PublicKey } from '@solana/web3.js'
 import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token'
-import { useIDKitRequest, IDKitRequestWidget } from '@worldcoin/idkit'
-import { deviceLegacy } from '@worldcoin/idkit-core'
-import type { IDKitResult } from '@worldcoin/idkit-core'
 import TopNav from '../../components/TopNav'
 import PrivyClaimCard from './PrivyClaimCard'
 import { openMoonPaySell } from '../../lib/moonpay'
-import { WORLD_ID_APP_ID, WORLD_ID_ACTION } from '../../lib/worldid'
+import { verifyWithWorldId, type WorldIdProof } from '../../lib/worldid'
 import { useProgram } from '../../hooks/useProgram'
 import { verifyWorldId as verifyWorldIdOnChain, findOrganizationPda, claimFunds as claimFundsOnChain } from '../../lib/program'
 
@@ -19,8 +16,8 @@ const USDC_MINT = new PublicKey('AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD')
 export default function Portal() {
   const [selectedCurrency, setSelectedCurrency] = useState('USD')
   const { ready, authenticated, user, login, logout } = usePrivy()
-  const [worldIdProof, setWorldIdProof] = useState<IDKitResult | null>(null)
-  const [widgetOpen, setWidgetOpen] = useState(false)
+  const [worldIdProof, setWorldIdProof] = useState<WorldIdProof | null>(null)
+  const [verifying, setVerifying] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [claimTx, setClaimTx] = useState<string | null>(null)
   const [claimError, setClaimError] = useState<string | null>(null)
@@ -54,23 +51,35 @@ export default function Portal() {
       })
   }, [publicKey, connection, claimTx])
 
-  const idkitConfig = useMemo(() => {
-    const ts = Math.floor(Date.now() / 1000)
-    return {
-      app_id: WORLD_ID_APP_ID as `app_${string}`,
-      action: WORLD_ID_ACTION,
-      allow_legacy_proofs: false,
-      rp_context: {
-        rp_id: WORLD_ID_APP_ID,
-        nonce: crypto.randomUUID(),
-        created_at: ts,
-        expires_at: ts + 3600,
-        signature: '',
-      },
-      preset: deviceLegacy({ signal: 'verify-employee' }),
+  // World ID verification — devnet demo path uses the mock helper from
+  // lib/worldid.ts, which fabricates a deterministic device-level proof so
+  // judges/contractors without World App installed can still demo the claim
+  // flow. The on-chain `verify_world_id` instruction still runs and stores a
+  // nullifier on the Employee PDA. The IDKit Request widget that previously
+  // gated this required a signed rp_context (server-signed via signRequest);
+  // wiring that up is part of the mainnet migration, not the hackathon demo.
+  const handleVerifyDemo = useCallback(async () => {
+    setVerifying(true)
+    try {
+      const proof = await verifyWithWorldId()
+      if (!proof) return
+      setWorldIdProof(proof)
+      if (program && publicKey) {
+        try {
+          const nullifierHex = proof.nullifier_hash.replace('0x', '').slice(0, 64).padEnd(64, '0')
+          const nullifierBytes = Array.from(Buffer.from(nullifierHex, 'hex'))
+          const storedAuthority = localStorage.getItem('zalary_org_authority')
+          const orgAuthority = storedAuthority ? new PublicKey(storedAuthority) : publicKey
+          const [orgPda] = findOrganizationPda(orgAuthority)
+          await verifyWorldIdOnChain(program, orgPda, nullifierBytes)
+        } catch (err) {
+          console.warn('On-chain World ID storage failed (expected if not employee of this org):', err)
+        }
+      }
+    } finally {
+      setVerifying(false)
     }
-  }, [])
-  const idkitRequest = useIDKitRequest(idkitConfig)
+  }, [program, publicKey])
 
   const handleClaim = useCallback(async () => {
     if (!connected || !publicKey) {
@@ -112,27 +121,6 @@ export default function Portal() {
       setClaiming(false)
     }
   }, [connected, publicKey, program, sendTransaction, connection, usdcBalance])
-
-  const handleWorldIdSuccess = async (result: IDKitResult) => {
-    setWorldIdProof(result)
-    console.log('World ID verified:', result)
-
-    // Write verification on-chain if program available
-    if (program && publicKey) {
-      try {
-        // nullifier is in responses[0].nullifier (IDKit v4 field name)
-        const nullifierHex = ((result.responses?.[0] as any)?.nullifier as string | undefined)?.replace('0x', '') || '0'.repeat(64)
-        const nullifierBytes = Array.from(Buffer.from(nullifierHex.slice(0, 64).padEnd(64, '0'), 'hex'))
-        const storedAuthority = localStorage.getItem('zalary_org_authority')
-        const orgAuthority = storedAuthority ? new PublicKey(storedAuthority) : publicKey
-        const [orgPda] = findOrganizationPda(orgAuthority)
-        await verifyWorldIdOnChain(program, orgPda, nullifierBytes)
-        console.log('World ID proof stored on-chain')
-      } catch (err) {
-        console.warn('On-chain World ID storage failed (expected if not employee of this org):', err)
-      }
-    }
-  }
 
   // Gate: show login screen if neither Privy authenticated nor wallet connected
   const isLoggedIn = (ready && authenticated) || connected
@@ -263,7 +251,8 @@ export default function Portal() {
           ) : (
             <>
               <button
-                onClick={() => setWidgetOpen(true)}
+                onClick={handleVerifyDemo}
+                disabled={verifying}
                 style={{
                   background: 'transparent',
                   border: '1px solid rgba(108,92,231,0.4)',
@@ -272,22 +261,21 @@ export default function Portal() {
                   borderRadius: 10,
                   fontSize: 14,
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: verifying ? 'wait' : 'pointer',
+                  opacity: verifying ? 0.6 : 1,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
                 }}
+                title="Devnet demo: synthesizes a device-level proof and writes a nullifier to your Employee PDA. Mainnet migration replaces this with the real IDKit flow."
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                Verify Identity
+                {verifying ? 'Verifying…' : 'Verify Identity (demo)'}
               </button>
-              <IDKitRequestWidget
-                {...idkitConfig}
-                {...idkitRequest}
-                open={widgetOpen}
-                onOpenChange={setWidgetOpen}
-                onSuccess={handleWorldIdSuccess}
-              />
+              {/* IDKitRequestWidget removed: devnet demo uses the mock helper
+                  above. Mainnet migration restores the real widget, which
+                  requires a server-signed rp_context via signRequest() from
+                  @worldcoin/idkit-core/signing. */}
             </>
           )}
         </div>

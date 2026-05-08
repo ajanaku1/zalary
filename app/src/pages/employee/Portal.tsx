@@ -404,6 +404,11 @@ export default function Portal() {
               Open MoonPay
             </button>
           </div>
+          <div style={{ padding: '0 20px', marginTop: 12 }}>
+            <a href="/employee/income" style={{ fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'underline' }}>
+              View income history → decrypted in your browser
+            </a>
+          </div>
         </div>
       </main>
     </div>

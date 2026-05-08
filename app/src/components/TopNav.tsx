@@ -8,7 +8,7 @@ import { useRole } from '../contexts/RoleContext'
 import { truncateAddress } from '../lib/utils'
 
 type TopNavVariant = 'landing' | 'employer' | 'employee'
-export type EmployerTab = 'dashboard' | 'team' | 'payroll' | 'treasury'
+export type EmployerTab = 'dashboard' | 'team' | 'payroll' | 'treasury' | 'insights'
 
 interface TopNavProps {
   variant: TopNavVariant
@@ -112,7 +112,7 @@ export default function TopNav({ variant, activeTab = 'dashboard', onTabChange, 
           </div>
         </div>
         <div className="nav-tabs" style={{ display: typeof window !== 'undefined' && window.innerWidth > 900 ? 'flex' : 'none' }}>
-          {(['dashboard', 'team', 'payroll', 'treasury'] as const).map((tab) => (
+          {(['dashboard', 'team', 'payroll', 'treasury', 'insights'] as const).map((tab) => (
             <button
               key={tab}
               className={activeTab === tab ? 'active' : ''}

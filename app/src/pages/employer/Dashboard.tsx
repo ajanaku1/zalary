@@ -8,6 +8,7 @@ import AddEmployee from './AddEmployee'
 import EmployeeDetail from './EmployeeDetail'
 import AuthGate from './AuthGate'
 import Onboarding from './Onboarding'
+import InsightsPanel from './InsightsPanel'
 import { useRole } from '../../contexts/RoleContext'
 import { useProgram } from '../../hooks/useProgram'
 import { createOrganization, addEmployee, closeOrganization as closeOrganizationOnChain, pauseOrganization as pauseOrganizationOnChain, resumeOrganization as resumeOrganizationOnChain, isOrganizationPaused, setAuditor as setAuditorOnChain, clearAuditor as clearAuditorOnChain, getAuditor, findOrganizationPda, findTreasuryPda } from '../../lib/program'
@@ -825,6 +826,16 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+        </div>
+        )}
+
+        {activeTab === 'insights' && (
+        <div style={{ padding: '0 20px', maxWidth: 960, margin: '0 auto' }}>
+          <div style={{ marginBottom: 24 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Insights</h2>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Treasury activity, cadence, and funder graph. No salary plaintext.</p>
+          </div>
+          <InsightsPanel authority={walletPublicKey ?? null} />
         </div>
         )}
 

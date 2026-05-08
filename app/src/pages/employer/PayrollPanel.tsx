@@ -29,6 +29,7 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
   const [phaseStates, setPhaseStates] = useState<Array<'idle' | 'active' | 'done'>>(['idle', 'idle', 'idle'])
   const [confettiDots, setConfettiDots] = useState<Array<{ id: number; left: string; color: string; delay: string; duration: string; size: string }>>([])
   const [txSignature, setTxSignature] = useState<string | null>(null)
+  const [priorityFee, setPriorityFee] = useState<number>(0)
   const [txError, setTxError] = useState<string | null>(null)
   const [signing, setSigning] = useState(false)
   const [txConfirmed, setTxConfirmed] = useState(false)
@@ -139,7 +140,7 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
         for (const emp of payableEmployees) {
           const employeeWalletPk = new PublicKey(emp.walletFull)
           const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, employeeWalletPk, false, TOKEN_2022_PROGRAM_ID)
-          const { tx } = await runPayrollOnChain(
+          const { tx, priorityFeeMicroLamports } = await runPayrollOnChain(
             program,
             orgPda,
             employeeWalletPk,
@@ -150,6 +151,7 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
             createdAt,
           )
           lastSig = tx
+          if (priorityFeeMicroLamports) setPriorityFee(priorityFeeMicroLamports)
           payrollCount++
         }
 
@@ -184,6 +186,7 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
       setPhaseStates(['idle', 'idle', 'idle'])
       setConfettiDots([])
       setTxSignature(null)
+      setPriorityFee(0)
       setTxError(null)
       setSigning(false)
       setTxConfirmed(false)
@@ -327,6 +330,11 @@ export default function PayrollPanel({ open, onClose, employees = [], onPayrollC
               </div>
               <h3>All {employees.length} team members have been paid</h3>
               <p>Payroll completed successfully</p>
+              {priorityFee > 0 && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -4 }}>
+                  Helius priority fee: <span className="mono">{priorityFee.toLocaleString()}</span> μlamports/CU
+                </p>
+              )}
               <div className="tx-hash">
                 <span className="mono">{txSignature ? `${txSignature.slice(0, 8)}...${txSignature.slice(-8)}` : 'No signature'}</span>
                 <button className="copy-btn" onClick={copyTxHash} aria-label="Copy transaction hash">

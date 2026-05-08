@@ -5,6 +5,7 @@ import Portal from './pages/employee/Portal'
 import IncomeHistory from './pages/employee/IncomeHistory'
 import JoinOrg from './pages/employee/JoinOrg'
 import ScreenNav from './components/ScreenNav'
+import HeliusLiveBanner from './components/HeliusLiveBanner'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/join" element={<JoinOrg />} />
       </Routes>
       <ScreenNav />
+      <HeliusLiveBanner />
     </>
   )
 }

@@ -1,7 +1,8 @@
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor'
-import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, type Connection, type Transaction } from '@solana/web3.js'
+import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, ComputeBudgetProgram, type Connection, type Transaction } from '@solana/web3.js'
 import { TOKEN_2022_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync } from '@solana/spl-token'
 import { IDL } from './zalary_idl'
+import { getPriorityFeeEstimate } from './helius-enhanced'
 
 // Poll signature status manually instead of using connection.confirmTransaction,
 // which relies on a WebSocket signatureSubscribe that some RPCs (Helius free tier,
@@ -285,7 +286,19 @@ export async function runPayroll(
     )
   }
 
-  return { tx: await sendTx(program, tx), payrollRunPda }
+  // Helius Priority Fee API — ask for the recent High-percentile micro-lamport
+  // price for txs touching these accounts, then attach a ComputeBudget ix so
+  // payroll lands fast under congestion. Devnet returns 0 (no congestion).
+  const microLamports = await getPriorityFeeEstimate(
+    connection,
+    [orgPda, treasuryPda, employeePda, payrollRunPda, employeeTokenAccount, usdcMint, authority],
+    'High',
+  )
+  if (microLamports > 0) {
+    tx.instructions.unshift(ComputeBudgetProgram.setComputeUnitPrice({ microLamports }))
+  }
+
+  return { tx: await sendTx(program, tx), payrollRunPda, priorityFeeMicroLamports: microLamports }
 }
 
 export async function verifyWorldId(

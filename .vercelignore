@@ -1,0 +1,13 @@
+target/
+**/target/
+node_modules/
+**/node_modules/
+.anchor/
+**/.anchor/
+dist/
+**/dist/
+.git/
+tests/
+docs/
+programs/
+*.so

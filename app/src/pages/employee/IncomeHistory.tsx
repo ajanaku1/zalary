@@ -17,8 +17,11 @@ import { useWallet } from '@solana/wallet-adapter-react'
 import TopNav from '../../components/TopNav'
 import { getProgramTxsForWallet, type ProgramTx } from '../../lib/covalent'
 import AnalyticsBanner from '../../components/AnalyticsBanner'
+import { fetchEnhancedTransactions, decodeZalaryInstructions, isHeliusEnhancedAvailable } from '../../lib/helius-enhanced'
 
 const SOLSCAN = (sig: string) => `https://solscan.io/tx/${sig}?cluster=devnet`
+
+const humanize = (n: string) => n.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()).trim()
 
 const wrap: CSSProperties = {
   paddingTop: 84,
@@ -34,6 +37,7 @@ const wrap: CSSProperties = {
 export default function IncomeHistory() {
   const { publicKey, connected } = useWallet()
   const [txs, setTxs] = useState<ProgramTx[]>([])
+  const [labels, setLabels] = useState<Record<string, string[]>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -46,7 +50,23 @@ export default function IncomeHistory() {
     ;(async () => {
       try {
         const fetched = await getProgramTxsForWallet(publicKey, 200)
-        if (!cancelled) setTxs(fetched)
+        if (cancelled) return
+        setTxs(fetched)
+
+        // Helius Enhanced API — decode instruction names from discriminators.
+        // Best-effort: a failure here just leaves rows unlabeled.
+        if (isHeliusEnhancedAvailable() && fetched.length > 0) {
+          try {
+            const enhanced = await fetchEnhancedTransactions(fetched.slice(0, 100).map(t => t.signature))
+            if (cancelled) return
+            const map: Record<string, string[]> = {}
+            for (const e of enhanced) {
+              const names = decodeZalaryInstructions(e)
+              if (names.length > 0) map[e.signature] = names
+            }
+            setLabels(map)
+          } catch { /* leave unlabeled */ }
+        }
       } catch (err: unknown) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load activity')
       } finally {
@@ -142,7 +162,7 @@ export default function IncomeHistory() {
                   <div className="timeline-content">
                     <div className="timeline-meta">
                       <span className="timeline-date">{new Date(tx.blockTime * 1000).toISOString().slice(0, 10)}</span>
-                      <span className="timeline-type">Zalary program</span>
+                      <span className="timeline-type">{labels[tx.signature]?.map(humanize).join(' · ') || 'Zalary program'}</span>
                     </div>
                     <div className="timeline-bottom">
                       <a className="timeline-tx" href={SOLSCAN(tx.signature)} target="_blank" rel="noreferrer">

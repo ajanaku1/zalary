@@ -2,17 +2,26 @@
 // (Insights cadence, Activity log, team grid, payroll review) has something
 // real to render.
 //
-// Usage:
-//   KEYPAIR_PATH=~/.config/solana/id.json \
-//   RPC_URL=https://devnet.helius-rpc.com/?api-key=YOUR_KEY \
-//   ORG_NAME="Acme Remote" \
-//   npm run seed-devnet
+// Two ways to provide the authority keypair:
+//   1. DEMO_AUTHORITY_KEYPAIR env (preferred — set in app/.env.local) as a
+//      64-byte JSON array.
+//   2. KEYPAIR_PATH env pointing at a Solana CLI-style JSON keypair file.
+//
+// RPC_URL defaults to Helius devnet from VITE_HELIUS_RPC_URL if set, else the
+// public devnet endpoint. ORG_NAME defaults to "Acme Remote".
 //
 // Idempotent: each step checks on-chain state first and skips if already done.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { resolve } from 'node:path'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { config as loadEnv } from 'dotenv'
+
+const here = dirname(fileURLToPath(import.meta.url))
+loadEnv({ path: resolve(here, '..', '.env.local') })
+loadEnv({ path: resolve(here, '..', '.env') })
+
 import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { AnchorProvider, Wallet } from '@coral-xyz/anchor'
 import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token'
@@ -65,14 +74,32 @@ async function main(): Promise<void> {
 }
 
 function buildProvider(): { connection: Connection; wallet: Wallet; provider: AnchorProvider } {
-  const keypairPath = process.env.KEYPAIR_PATH ?? `${homedir()}/.config/solana/id.json`
-  const rpcUrl = process.env.RPC_URL ?? DEFAULT_RPC
-  const secret = JSON.parse(readFileSync(resolve(keypairPath.replace(/^~/, homedir())), 'utf8'))
-  const keypair = Keypair.fromSecretKey(new Uint8Array(secret))
+  const rpcUrl = process.env.RPC_URL ?? process.env.VITE_HELIUS_RPC_URL ?? DEFAULT_RPC
+  const keypair = loadKeypair()
   const connection = new Connection(rpcUrl, 'confirmed')
   const wallet = new Wallet(keypair)
   const provider = new AnchorProvider(connection, wallet, { commitment: 'confirmed' })
   return { connection, wallet, provider }
+}
+
+function loadKeypair(): Keypair {
+  // Preferred: 64-byte JSON array in env (no file on disk).
+  const inline = process.env.DEMO_AUTHORITY_KEYPAIR
+  if (inline) {
+    const secret = JSON.parse(inline)
+    return Keypair.fromSecretKey(new Uint8Array(secret))
+  }
+  // Fallback: file path. Defaults to the standard Solana CLI keypair.
+  const rawPath = process.env.KEYPAIR_PATH ?? `${homedir()}/.config/solana/id.json`
+  const keypairPath = resolve(rawPath.replace(/^~/, homedir()))
+  if (!existsSync(keypairPath)) {
+    throw new Error(
+      `No DEMO_AUTHORITY_KEYPAIR env set and no keypair file at ${keypairPath}. ` +
+      `Set DEMO_AUTHORITY_KEYPAIR in app/.env.local (64-byte JSON array) or pass KEYPAIR_PATH.`,
+    )
+  }
+  const secret = JSON.parse(readFileSync(keypairPath, 'utf8'))
+  return Keypair.fromSecretKey(new Uint8Array(secret))
 }
 
 async function assertFunded(connection: Connection, authority: PublicKey): Promise<void> {

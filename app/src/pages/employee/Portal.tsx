@@ -120,7 +120,7 @@ export default function Portal() {
     } finally {
       setClaiming(false)
     }
-  }, [connected, publicKey, program, sendTransaction, connection, usdcBalance])
+  }, [connected, publicKey, program, sendTransaction, connection, usdcBalance, worldIdProof])
 
   // Gate: show login screen if neither Privy authenticated nor wallet connected
   const isLoggedIn = (ready && authenticated) || connected

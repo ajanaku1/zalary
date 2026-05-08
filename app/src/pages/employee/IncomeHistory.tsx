@@ -6,7 +6,7 @@
 //   - When the ConfidentialTransfer migration ships, swap decryptSalary for the
 //     ElGamal viewing-key decrypt. The component shape does not change.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey } from '@solana/web3.js'
 import TopNav from '../../components/TopNav'
@@ -76,11 +76,22 @@ export default function IncomeHistory() {
   const totalUsd = rows.reduce((sum, r) => sum + r.amountUsd, 0)
   const yearTotal = useMemo(() => byTaxYear(rows), [rows])
 
+  const wrapStyle: CSSProperties = {
+    paddingTop: 84,
+    paddingLeft: 20,
+    paddingRight: 20,
+    paddingBottom: 40,
+    display: 'grid',
+    gap: 16,
+    maxWidth: 880,
+    margin: '0 auto',
+  }
+
   if (!connected) {
     return (
       <div className="screen active">
         <TopNav variant="employee" />
-        <main style={{ padding: 20 }}>
+        <main style={wrapStyle}>
           <Card>Connect your wallet to view income history.</Card>
         </main>
       </div>
@@ -90,7 +101,7 @@ export default function IncomeHistory() {
   return (
     <div className="screen active">
       <TopNav variant="employee" />
-      <main style={{ padding: 20, display: 'grid', gap: 16 }}>
+      <main style={wrapStyle}>
         <AnalyticsBanner onChange={() => setReloadKey(k => k + 1)} />
         <Card>
           <h2 style={{ margin: 0, fontSize: 18 }}>Income history</h2>
@@ -115,11 +126,14 @@ export default function IncomeHistory() {
 
 function Summary({ total, count, salary }: { total: number; count: number; salary: number | null }) {
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  const salaryDisplay = salary != null && Number.isFinite(salary) && salary > 0
+    ? fmt(salary)
+    : 'Not set'
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
       <Stat label="Total earned" value={fmt(total)} />
-      <Stat label="Payments" value={String(count)} />
-      <Stat label="Period salary" value={salary != null ? fmt(salary) : '—'} />
+      <Stat label="Program txs" value={String(count)} />
+      <Stat label="Period salary" value={salaryDisplay} />
     </div>
   )
 }

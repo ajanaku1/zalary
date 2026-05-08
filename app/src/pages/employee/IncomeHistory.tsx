@@ -10,7 +10,6 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey } from '@solana/web3.js'
 import TopNav from '../../components/TopNav'
-import Card from '../../components/Card'
 import { useProgram } from '../../hooks/useProgram'
 import { findEmployeePda, findOrganizationPda } from '../../lib/program'
 import { decryptSalary } from '../../lib/salary_crypto'
@@ -21,7 +20,20 @@ interface DecryptedRow {
   signature: string
   date: string
   amountUsd: number  // never sent over the network
-  status: 'success' | 'failed'
+}
+
+const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+const SOLSCAN = (sig: string) => `https://solscan.io/tx/${sig}?cluster=devnet`
+
+const wrap: CSSProperties = {
+  paddingTop: 84,
+  paddingLeft: 20,
+  paddingRight: 20,
+  paddingBottom: 60,
+  display: 'grid',
+  gap: 20,
+  maxWidth: 720,
+  margin: '0 auto',
 }
 
 export default function IncomeHistory() {
@@ -61,38 +73,29 @@ export default function IncomeHistory() {
     return () => { cancelled = true }
   }, [connected, publicKey, program, reloadKey])
 
+  const hasSalary = salaryUsd != null && Number.isFinite(salaryUsd) && salaryUsd >= 0.01
+
   const rows = useMemo<DecryptedRow[]>(() => {
-    if (salaryUsd == null) return []
     return txs
       .filter(tx => tx.success)
       .map(tx => ({
         signature: tx.signature,
         date: new Date(tx.blockTime * 1000).toISOString().slice(0, 10),
-        amountUsd: salaryUsd,
-        status: 'success' as const,
+        amountUsd: hasSalary ? (salaryUsd as number) : 0,
       }))
-  }, [txs, salaryUsd])
+  }, [txs, salaryUsd, hasSalary])
 
   const totalUsd = rows.reduce((sum, r) => sum + r.amountUsd, 0)
   const yearTotal = useMemo(() => byTaxYear(rows), [rows])
-
-  const wrapStyle: CSSProperties = {
-    paddingTop: 84,
-    paddingLeft: 20,
-    paddingRight: 20,
-    paddingBottom: 40,
-    display: 'grid',
-    gap: 16,
-    maxWidth: 880,
-    margin: '0 auto',
-  }
 
   if (!connected) {
     return (
       <div className="screen active">
         <TopNav variant="employee" />
-        <main style={wrapStyle}>
-          <Card>Connect your wallet to view income history.</Card>
+        <main style={wrap}>
+          <div className="treasury-card" style={{ textAlign: 'center' }}>
+            <div className="label" style={{ marginBottom: 8 }}>Connect a wallet to view income history</div>
+          </div>
         </main>
       </div>
     )
@@ -101,92 +104,101 @@ export default function IncomeHistory() {
   return (
     <div className="screen active">
       <TopNav variant="employee" />
-      <main style={wrapStyle}>
+      <main style={wrap}>
         <AnalyticsBanner onChange={() => setReloadKey(k => k + 1)} />
-        <Card>
-          <h2 style={{ margin: 0, fontSize: 18 }}>Income history</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '6px 0 16px' }}>
-            Decrypted in your browser. Amounts never touch the network.
-          </p>
-          {loading && <div>Loading…</div>}
-          {error && <div style={{ color: 'var(--danger, #e74c3c)' }}>{error}</div>}
-          {!loading && !error && (
-            <>
-              <Summary total={totalUsd} count={rows.length} salary={salaryUsd} />
-              <YearBreakdown yearTotal={yearTotal} />
-              <ExportButton rows={rows} wallet={publicKey?.toBase58() ?? ''} />
-              <TxTable rows={rows} />
-            </>
-          )}
-        </Card>
-      </main>
-    </div>
-  )
-}
 
-function Summary({ total, count, salary }: { total: number; count: number; salary: number | null }) {
-  const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
-  const salaryDisplay = salary != null && Number.isFinite(salary) && salary > 0
-    ? fmt(salary)
-    : 'Not set'
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
-      <Stat label="Total earned" value={fmt(total)} />
-      <Stat label="Program txs" value={String(count)} />
-      <Stat label="Period salary" value={salaryDisplay} />
-    </div>
-  )
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 600 }}>{value}</div>
-    </div>
-  )
-}
-
-function YearBreakdown({ yearTotal }: { yearTotal: Record<string, number> }) {
-  const years = Object.keys(yearTotal).sort().reverse()
-  if (years.length === 0) return null
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>By tax year</div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {years.map(y => (
-          <span key={y} style={{ padding: '4px 10px', background: 'var(--card-alt, rgba(255,255,255,0.04))', borderRadius: 6, fontSize: 13 }}>
-            {y}: {yearTotal[y].toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function TxTable({ rows }: { rows: DecryptedRow[] }) {
-  if (rows.length === 0) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No payments yet.</div>
-  return (
-    <div style={{ display: 'grid', gap: 6 }}>
-      {rows.map(r => (
-        <div key={r.signature} style={{ display: 'grid', gridTemplateColumns: '90px 1fr auto', gap: 12, fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-          <span>{r.date}</span>
-          <a href={`https://solscan.io/tx/${r.signature}?cluster=devnet`} target="_blank" rel="noreferrer" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>
-            {r.signature.slice(0, 8)}…{r.signature.slice(-6)}
-          </a>
-          <span style={{ fontWeight: 600 }}>
-            {r.amountUsd.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
-          </span>
+        {/* Hero — total earned */}
+        <div className="balance-card-wrapper">
+          <div className="balance-card-inner">
+            <div className="balance-label">Total earned (decrypted locally)</div>
+            <div className="balance-amount mono">{loading ? '—' : fmt(totalUsd)}</div>
+            <div className="balance-caption">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              Plaintext never leaves your browser
+            </div>
+          </div>
         </div>
-      ))}
+
+        {error && (
+          <div className="treasury-card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}>
+            {error}
+          </div>
+        )}
+
+        {/* Quick stats */}
+        <div className="quick-stats">
+          <div className="stat-card">
+            <div className="stat-label">Program txs</div>
+            <div className="stat-value">{rows.length}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Period salary</div>
+            <div className="stat-value">{hasSalary ? fmt(salaryUsd as number) : 'Not set'}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">This year</div>
+            <div className="stat-value">{fmt(yearTotal[String(new Date().getFullYear())] ?? 0)}</div>
+          </div>
+        </div>
+
+        {/* By tax year + CSV */}
+        <div className="treasury-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>By tax year</h3>
+            <ExportButton rows={rows} wallet={publicKey?.toBase58() ?? ''} />
+          </div>
+          {Object.keys(yearTotal).length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No payments yet.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {Object.keys(yearTotal).sort().reverse().map(y => (
+                <div key={y} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+                  <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{y}</span>
+                  <span className="mono" style={{ fontSize: 14, fontWeight: 600 }}>{fmt(yearTotal[y])}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Timeline */}
+        <div className="treasury-card payment-history">
+          <h3>Transaction history</h3>
+          {rows.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              {loading ? 'Loading…' : 'No on-chain activity yet for this wallet.'}
+            </div>
+          ) : (
+            <div className="timeline">
+              {rows.map(r => (
+                <div className="timeline-item" key={r.signature}>
+                  <div className="timeline-dot" />
+                  <div className="timeline-content">
+                    <div className="timeline-meta">
+                      <span className="timeline-date">{r.date}</span>
+                      <span className="timeline-type">Zalary program</span>
+                    </div>
+                    <div className="timeline-bottom">
+                      <a className="timeline-tx" href={SOLSCAN(r.signature)} target="_blank" rel="noreferrer">
+                        {r.signature.slice(0, 8)}…{r.signature.slice(-6)}
+                      </a>
+                      <span className="timeline-amount mono">{fmt(r.amountUsd)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   )
 }
 
 function ExportButton({ rows, wallet }: { rows: DecryptedRow[]; wallet: string }) {
   const onExport = () => {
-    const header = 'date,signature,amount_usd,status\n'
-    const body = rows.map(r => `${r.date},${r.signature},${r.amountUsd},${r.status}`).join('\n')
+    const header = 'date,signature,amount_usd\n'
+    const body = rows.map(r => `${r.date},${r.signature},${r.amountUsd}`).join('\n')
     const blob = new Blob([header + body], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -199,9 +211,19 @@ function ExportButton({ rows, wallet }: { rows: DecryptedRow[]; wallet: string }
     <button
       onClick={onExport}
       disabled={rows.length === 0}
-      style={{ marginBottom: 16, padding: '8px 14px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer' }}
+      style={{
+        padding: '8px 14px',
+        borderRadius: 'var(--radius-full)',
+        border: '1px solid var(--accent)',
+        background: 'transparent',
+        color: 'var(--accent)',
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: rows.length === 0 ? 'not-allowed' : 'pointer',
+        opacity: rows.length === 0 ? 0.5 : 1,
+      }}
     >
-      Download CSV (built locally)
+      Download CSV
     </button>
   )
 }

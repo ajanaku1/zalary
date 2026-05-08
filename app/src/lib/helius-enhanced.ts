@@ -20,9 +20,10 @@
 import { Connection, PublicKey } from '@solana/web3.js'
 import { IDL } from './zalary_idl'
 import { PROGRAM_ID } from './program'
+import { getEnv } from './env'
 
 const HELIUS_BASE = (() => {
-  const url = import.meta.env.VITE_HELIUS_RPC_URL as string | undefined
+  const url = getEnv('VITE_HELIUS_RPC_URL')
   if (!url) return null
   // Helius RPC URL pattern: https://<cluster>.helius-rpc.com/?api-key=KEY
   // Enhanced API lives at https://api-<cluster>.helius.xyz/v0/...

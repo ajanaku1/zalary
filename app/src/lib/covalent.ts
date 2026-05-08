@@ -18,9 +18,17 @@ const COVALENT_BASE = 'https://api.covalenthq.com/v1'
 const SOLANA_CHAIN = 'solana-mainnet'
 const API_KEY = import.meta.env.VITE_COVALENT_API_KEY as string | undefined
 
+// Showcase wallets for the Insights "demo mode" toggle. Zalary lives on devnet,
+// Covalent indexes mainnet only, so the live Insights tab would show empty
+// cards without an override. When demo mode is on, Covalent queries run
+// against these mainnet addresses so the integration is visible to judges.
+const SHOWCASE_WALLET_SOL = import.meta.env.VITE_DEMO_SHOWCASE_WALLET_SOL as string | undefined
+const SHOWCASE_WALLET_EVM = import.meta.env.VITE_DEMO_SHOWCASE_WALLET_EVM as string | undefined
+
 export type AnalyticsMode = 'covalent' | 'rpc'
 
 const SETTING_KEY = 'zalary_analytics_mode'
+const DEMO_KEY = 'zalary_demo_mode'
 
 export function getAnalyticsMode(): AnalyticsMode {
   const stored = localStorage.getItem(SETTING_KEY)
@@ -34,6 +42,30 @@ export function setAnalyticsMode(mode: AnalyticsMode) {
 
 export function isCovalentAvailable(): boolean {
   return Boolean(API_KEY) && NETWORK !== 'devnet'
+}
+
+// Demo-mode toggle. When ON and a showcase wallet is configured, Insights
+// queries Covalent against the showcase wallet so the integration shows real
+// mainnet activity. UI must surface a "Demo data" badge so this isn't
+// mistaken for the user's own treasury.
+export function getDemoMode(): boolean {
+  return localStorage.getItem(DEMO_KEY) === '1'
+}
+
+export function setDemoMode(on: boolean): void {
+  localStorage.setItem(DEMO_KEY, on ? '1' : '0')
+}
+
+export function getShowcaseWalletSol(): string | null {
+  return SHOWCASE_WALLET_SOL ?? null
+}
+
+export function getShowcaseWalletEvm(): string | null {
+  return SHOWCASE_WALLET_EVM ?? null
+}
+
+export function isShowcaseAvailable(): boolean {
+  return Boolean(SHOWCASE_WALLET_SOL)
 }
 
 export interface ProgramTx {

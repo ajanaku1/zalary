@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PublicKey } from '@solana/web3.js'
 import { findOrganizationPda, findTreasuryPda } from '../../lib/program'
-import { getProgramTxsForWallet, type ProgramTx } from '../../lib/covalent'
+import { getProgramTxsForWallet, getDemoMode, getShowcaseWalletSol, getShowcaseWalletEvm, type ProgramTx } from '../../lib/covalent'
 import { getTreasuryBalanceHistory, isPortfolioAvailable, type BalancePoint } from '../../lib/covalent-balances'
 import { getMultiFiat, isPricingAvailable, type FiatQuote, type FiatCode } from '../../lib/covalent-pricing'
 import { getCrossChainStables, getSolUsdPrice, isMultichainAvailable, type CrossChainBalance } from '../../lib/covalent-multichain'
@@ -29,6 +29,7 @@ export default function InsightsPanel({ authority }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [demoOn, setDemoOn] = useState(getDemoMode())
   const liveEvent = useHeliusLogStream(true)
 
   // Real-time refresh: when a Zalary tx lands and it touched the treasury,
@@ -48,15 +49,21 @@ export default function InsightsPanel({ authority }: Props) {
       try {
         const [orgPda] = findOrganizationPda(authority)
         const [treasuryPda] = findTreasuryPda(orgPda)
+
+        // In demo mode, swap the queried Solana wallet for the configured
+        // mainnet showcase wallet so Covalent returns real data instead of
+        // empty cards. EVM cross-chain wallet has its own override.
+        const showcaseSol = getShowcaseWalletSol()
+        const showcaseEvm = getShowcaseWalletEvm()
+        const queriedSolPda = demoOn && showcaseSol ? new PublicKey(showcaseSol) : treasuryPda
+        const queriedEvm = demoOn && showcaseEvm ? showcaseEvm : authority.toBase58()
+        const queriedSolForChain = demoOn && showcaseSol ? showcaseSol : authority.toBase58()
+
         const [fetched, hist, quotes, xchain, sol] = await Promise.all([
-          getProgramTxsForWallet(treasuryPda, 200),
-          isPortfolioAvailable() ? getTreasuryBalanceHistory(treasuryPda).catch(() => []) : Promise.resolve([]),
+          getProgramTxsForWallet(queriedSolPda, 200),
+          isPortfolioAvailable() ? getTreasuryBalanceHistory(queriedSolPda).catch(() => []) : Promise.resolve([]),
           isPricingAvailable() ? getMultiFiat().catch(() => []) : Promise.resolve([]),
-          // Cross-chain treasury preview: query the employer wallet across
-          // EVM chains (using its base58 — works only if they've also held EVM
-          // assets at the same string, which is rare; in practice judges will
-          // see this populated when we plug in a real EVM-mapped wallet).
-          isMultichainAvailable() ? getCrossChainStables(authority.toBase58(), authority.toBase58()).catch(() => []) : Promise.resolve([]),
+          isMultichainAvailable() ? getCrossChainStables(queriedEvm, queriedSolForChain).catch(() => []) : Promise.resolve([]),
           isMultichainAvailable() ? getSolUsdPrice().catch(() => null) : Promise.resolve(null),
         ])
         if (!cancelled) {
@@ -87,7 +94,15 @@ export default function InsightsPanel({ authority }: Props) {
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
-      <AnalyticsBanner onChange={() => setReloadKey(k => k + 1)} />
+      <AnalyticsBanner
+        onChange={() => setReloadKey(k => k + 1)}
+        onDemoChange={(on) => { setDemoOn(on); setReloadKey(k => k + 1) }}
+      />
+      {demoOn && (
+        <div style={{ padding: '8px 12px', background: 'var(--accent)', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 600, textAlign: 'center' }}>
+          Showcase data — Covalent panels below show a mainnet wallet, not your devnet treasury
+        </div>
+      )}
 
       {/* Hero — total treasury activity */}
       <div className="balance-card-wrapper">

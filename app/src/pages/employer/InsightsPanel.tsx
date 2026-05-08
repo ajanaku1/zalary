@@ -10,7 +10,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { PublicKey } from '@solana/web3.js'
 import { findOrganizationPda, findTreasuryPda } from '../../lib/program'
 import { getProgramTxsForWallet, type ProgramTx } from '../../lib/covalent'
+import { getTreasuryBalanceHistory, isPortfolioAvailable, type BalancePoint } from '../../lib/covalent-balances'
+import { getMultiFiat, isPricingAvailable, type FiatQuote, type FiatCode } from '../../lib/covalent-pricing'
 import AnalyticsBanner from '../../components/AnalyticsBanner'
+import { useHeliusLogStream } from '../../hooks/useHeliusLogStream'
 
 interface Props {
   authority: PublicKey | null
@@ -18,9 +21,20 @@ interface Props {
 
 export default function InsightsPanel({ authority }: Props) {
   const [txs, setTxs] = useState<ProgramTx[]>([])
+  const [history, setHistory] = useState<BalancePoint[]>([])
+  const [fiat, setFiat] = useState<FiatQuote[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const liveEvent = useHeliusLogStream(true)
+
+  // Real-time refresh: when a Zalary tx lands and it touched the treasury,
+  // refetch Covalent rather than waiting for a manual reload. Push, not poll.
+  useEffect(() => {
+    if (liveEvent && liveEvent.instructions.some(i => i === 'runPayroll' || i === 'fundTreasury' || i === 'claimFunds')) {
+      setReloadKey(k => k + 1)
+    }
+  }, [liveEvent])
 
   useEffect(() => {
     if (!authority) return
@@ -31,8 +45,16 @@ export default function InsightsPanel({ authority }: Props) {
       try {
         const [orgPda] = findOrganizationPda(authority)
         const [treasuryPda] = findTreasuryPda(orgPda)
-        const fetched = await getProgramTxsForWallet(treasuryPda, 200)
-        if (!cancelled) setTxs(fetched)
+        const [fetched, hist, quotes] = await Promise.all([
+          getProgramTxsForWallet(treasuryPda, 200),
+          isPortfolioAvailable() ? getTreasuryBalanceHistory(treasuryPda).catch(() => []) : Promise.resolve([]),
+          isPricingAvailable() ? getMultiFiat().catch(() => []) : Promise.resolve([]),
+        ])
+        if (!cancelled) {
+          setTxs(fetched)
+          setHistory(hist)
+          setFiat(quotes)
+        }
       } catch (err: unknown) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load insights')
       } finally {
@@ -101,6 +123,35 @@ export default function InsightsPanel({ authority }: Props) {
         </p>
       </div>
 
+      {/* Treasury balance trail (Covalent Portfolio v2) */}
+      {history.length > 0 && (
+        <div className="treasury-card">
+          <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>
+            Treasury USDC · 30d
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 400 }}>via Covalent Portfolio v2</span>
+          </h3>
+          <BalanceSparkline points={history} />
+        </div>
+      )}
+
+      {/* Fiat tile (Covalent Pricing) */}
+      {fiat.length > 0 && (
+        <div className="treasury-card">
+          <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>
+            1 USDC in fiat
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 400 }}>via Covalent Pricing · for receipts only, never on-chain</span>
+          </h3>
+          <div className="quick-stats">
+            {fiat.map(q => (
+              <div className="stat-card" key={q.currency}>
+                <div className="stat-label">{q.currency}</div>
+                <div className="stat-value">{formatFiat(q.pricePerUsdc, q.currency)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Cadence */}
       <div className="treasury-card">
         <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 600 }}>Cadence</h3>
@@ -166,6 +217,45 @@ function deriveStats(txs: ProgramTx[]): Stats {
     funders: funders.size,
     feeLamports,
     byMonth,
+  }
+}
+
+function BalanceSparkline({ points }: { points: BalancePoint[] }) {
+  const w = 600, h = 120, pad = 8
+  const max = Math.max(...points.map(p => p.balance), 1)
+  const min = Math.min(...points.map(p => p.balance), 0)
+  const range = max - min || 1
+  const path = points.map((p, i) => {
+    const x = pad + (i / Math.max(points.length - 1, 1)) * (w - pad * 2)
+    const y = h - pad - ((p.balance - min) / range) * (h - pad * 2)
+    return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
+  }).join(' ')
+  const last = points[points.length - 1]
+  return (
+    <div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 120, display: 'block' }}>
+        <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2" />
+        <path d={`${path} L ${w - pad} ${h - pad} L ${pad} ${h - pad} Z`} fill="url(#g)" opacity="0.18" />
+        <defs>
+          <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+        <span>{points[0]?.date}</span>
+        <span className="mono">{last?.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC · {last?.date}</span>
+      </div>
+    </div>
+  )
+}
+
+function formatFiat(price: number, currency: FiatCode): string {
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 2 }).format(price)
+  } catch {
+    return price.toFixed(2)
   }
 }
 

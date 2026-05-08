@@ -409,7 +409,7 @@ export default function Portal() {
           </div>
           <div style={{ padding: '0 20px', marginTop: 12 }}>
             <a href="/employee/income" style={{ fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'underline' }}>
-              View income history → decrypted in your browser
+              View on-chain activity log
             </a>
           </div>
         </div>

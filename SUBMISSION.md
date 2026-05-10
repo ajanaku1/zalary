@@ -1,125 +1,119 @@
 # Zalary — Colosseum Frontier Hackathon Submission
 
-**Program ID:** `FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH` (Solana devnet)  
-**Demo:** [localhost:5173 when running locally]  
-**Builder:** Bambam
+**Builder:** Bambam (Lagos)
+**Repo:** github.com/[your handle]/Zalary
+**Demo:** runs at `localhost:5173` after `cd app && npm install && npm run dev`. Vercel build available at zalary.vercel.app.
+**Devnet program:** legacy Anchor org program at `FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH`; the privacy layer is Umbra's Arcium MXE program at `DSuKkyqGVGgo4QtPABfxKJKygUDACbUhirnuv63mEpAJ`.
 
 ---
 
-## What it is
+## The product
 
-Zalary is a payroll protocol on Solana. Employers deposit USDC, add employees, and run payroll. The twist: salary amounts are encrypted on-chain. A block explorer can confirm a payment happened. It can't tell you how much.
+Zalary is confidential payroll for remote teams. An employer holds a shielded balance of dUSDC, runs payroll once a month, and each employee receives a sealed envelope that only they can open. Solana sees that an envelope was created. It cannot see the amount, the sender, or which employees received what.
 
-The full loop: employer funds treasury in USDC → payroll runs on-chain with encrypted amounts → employee claims their salary → employee converts to local currency via MoonPay, without leaving the app. The target user is a remote worker in Nigeria, India, or Brazil getting paid by a crypto-native company.
-
-The salary privacy problem in crypto is real. Web3 companies that want to pay in USDC face a choice between using centralized payroll services (which defeats the point) or accepting that their entire payroll structure is public knowledge. Zalary is an attempt at a third option.
+Why this matters: I live in Lagos. I have paid contractors in USDC because Wise eats 4% and Deel doesn't cover Nigeria. The thing every founder doing this hates is that every payment is public on a block explorer. Your competitors can read your hiring strategy off the chain. Your employee's neighbour can see how much they got paid this month. Token-2022 confidential transfers shipped in 2024 and made the on-chain piece solvable in principle; Umbra's Arcium-backed mixer made it solvable in practice without rolling your own MPC. Zalary is what you build on top.
 
 ---
 
-## Technical approach
+## Six shielded surfaces
 
-### On-chain program (Anchor / Rust)
+I committed to "deep integration = 3+ surfaces" as a Frontier judging floor. Six surfaces shipped against the Umbra SDK on devnet:
 
-The program lives at `programs/zalary/src/lib.rs`. Key accounts:
+1. **Shielded user registration** (`UmbraProvider.tsx`, `lib/umbra.ts`)
+   On first connect, the user signs one fixed message with their main wallet. SHA-256 of that signature seeds a deterministic Ed25519 keypair which becomes their *shielded session*. The session pubkey is intentionally distinct from the main wallet, so the encrypted balance lives under an address nobody can link back to the public identity without the user revealing it. Confidential-mode registration writes the X25519 key on-chain via two Umbra instructions. The seed is cached in `sessionStorage` so refresh doesn't re-prompt, and wiped when the tab closes.
 
-**Organization PDA** — `[b"org", authority.key()]`  
-Stores org name, employee count, payroll count, treasury address, authority pubkey.
+2. **Public to encrypted treasury deposit** (`ShieldedTreasuryPanel.tsx`)
+   Employer claims 1,000 dUSDC from Umbra's faucet (one click, proxied through the Vite dev server because the faucet doesn't set CORS), then deposits it into their encrypted balance via `getPublicBalanceToEncryptedBalanceDirectDepositorFunction`. The deposit fires a queue tx, an Arcium MPC computation runs off-chain, and a callback tx finalizes the encrypted balance. The panel shows elapsed seconds and explains the wait, because devnet MPC takes 30 to 90 seconds.
 
-**Employee PDA** — `[b"employee", org_pda, wallet]`  
-Stores the employee's wallet, encrypted salary (64-byte blob), World ID verification status, and last paid timestamp.
+3. **Receiver-claimable UTXO disbursement** (`ShieldedPayrollPanel.tsx`)
+   For each employee, the panel creates one receiver-claimable UTXO from the employer's encrypted balance. The UTXO is addressed to the recipient's session pubkey and uses Umbra's anonymous-mode unlocker, so the on-chain link between employer and employee is broken. Before submitting, the panel validates that the recipient is X25519-registered, with an 8-second retry to handle the gap between the recipient's account-init tx and their key-registration tx. Per-row status: Queued → Checking Umbra registration → Generating ZK proof → Submitting + Arcium MPC → Disbursed.
 
-**Treasury** — a USDC token account initialized as a PDA of the org. Employer funds it; payroll pulls from it; employees can verify the balance.
+4. **Employee inbox scan** (`ShieldedInbox.tsx`)
+   The recipient's browser calls `getClaimableUtxoScannerFunction` against tree 0 from insertion 0, walks the Umbra mixer tree, and decrypts any UTXOs addressed to their session keypair. The amount is shown in plaintext to the recipient (because only they hold the master viewing key for these UTXOs); the same tx on a block explorer shows nothing. Scan results are cached in `sessionStorage` keyed by session pubkey, so re-login doesn't require re-scanning.
 
-**PayrollRun** — `[b"payroll", org_pda, payroll_count_le_bytes]`  
-Immutable log of each run: who initiated it, how many employees, total amount, timestamp.
+5. **Encrypted to public unshield** (same component)
+   The recipient calls `getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction` to move dUSDC out of their encrypted balance into a public ATA. From there the existing MoonPay off-ramp converts to NGN, INR, BRL.
 
-### Salary privacy
-
-The on-chain zUSDC mint (`AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD`) is a Token-2022 mint with the `ConfidentialTransferMint` extension enabled (auto-approve mode). Treasury and employee ATAs are Token-2022 ATAs ready to participate in confidential transfers, where balances are stored as ElGamal commitments and transfer amounts are proven via ZK range proofs.
-
-Current transfers use `TransferChecked` (Token-2022's standard transfer) — the plumbing is in place but ZK transfers are pending. `app/src/lib/salary_crypto.ts` carries an AES blob on the Employee PDA as a structural placeholder so the data model matches the production swap-in.
-
-### Identity verification
-
-The `verify_world_id` instruction takes a 32-byte nullifier hash from a World ID proof and stores it on the Employee PDA. The `claim_funds` instruction can gate on `world_id_verified`. The employee portal uses IDKit v4 (`@worldcoin/idkit`) with `deviceLegacy` preset.
-
-### Frontend
-
-React + Vite + TypeScript. Two separate flows:
-
-**Employer** (`/employer`)
-- Onboarding: 6-step flow to create org, fund treasury, and add employees. Each step fires the corresponding Anchor instruction.
-- Dashboard: reads on-chain employee accounts via `program.account.employee.all([memcmp filter])`, shows live treasury balance from `connection.getTokenAccountBalance`.
-- PayrollPanel: loops through employees, calls `run_payroll` per employee.
-- EmployeeDetail: set and encrypt salary, calls `update_salary` on-chain.
-
-**Employee** (`/employee`)
-- Balance card reads the employee's USDC ATA via `connection.getTokenAccountBalance`.
-- Claim button calls `claim_funds`, refreshes balance after.
-- World ID widget opens on "Verify Identity" click, stores nullifier on-chain on success.
-- MoonPay sell widget for fiat conversion.
-
-Auth: Phantom wallet via `@solana/wallet-adapter` for on-chain signers; Privy for employees who don't have a self-custody wallet yet.
+6. **Hierarchical compliance grant** (`ShieldedCompliancePanel.tsx`)
+   The employer can issue a selective viewing grant to an auditor pubkey (tax authority, internal compliance officer, regulator). The grant is created by `getComplianceGrantIssuerFunction`, scoped to one specific auditor, revocable at any time via `getComplianceGrantRevokerFunction`. Both calls require the auditor to be Umbra-registered first, which the panel checks explicitly. The grants list persists to localStorage so the employer keeps an audit trail of who they've granted what.
 
 ---
 
-## Sponsor integrations
+## What works end-to-end on devnet
 
-**Token-2022 ConfidentialTransfer** — zUSDC mint enabled with the extension (auto-approve). Treasury and employee ATAs are Token-2022 accounts. Migration to ZK-proven `ConfidentialTransfer::Transfer` is the next sprint; the on-chain primitive is configured.
+- Surface 1, 2, 6 fire real txs every time and finalize cleanly.
+- Surface 3 issues real receiver-claimable UTXOs and the txs land on devnet. Recipient sees them in their inbox scan.
+- Surface 4's scan returns the correct decrypted amount.
+- Surface 5 unshields end-to-end.
 
-**World ID** — `verify_world_id` instruction + IDKit v4 frontend widget. Nullifier hash stored on-chain to prevent double-verification.
+## What's stubbed
 
-**Privy** — employee auth via social login. Employees without a wallet can sign in with email/Google and connect a wallet afterward.
-
-**MoonPay** — sell widget in the employee portal for converting USDC salary to local currency.
-
-**Phantom** — primary wallet for both employer and employee on-chain signing.
-
-**Solana** — the L1. Sub-cent fees per payroll transfer. ~400ms finality.
-
----
-
-## What's live on devnet
-
-- Org creation, treasury funding, employee add — all execute real Anchor instructions
-- `run_payroll` transfers USDC from the org treasury to employee ATAs
-- `claim_funds` wired in the employee portal (reads live USDC balance, calls instruction)
-- `update_salary` fires from EmployeeDetail when salary is changed
-- `verify_world_id` fires on World ID success callback
-- On-chain employee accounts load into the Dashboard (memcmp filter on org PDA)
-- Treasury balance reads from the token account in real time
+- **Live claim in Surface 4 is disabled in the build.** Umbra's `BatchMerkleVerifier_73` circuit was rejecting devnet proofs intermittently. The UI surfaces the decrypted UTXO amount (which proves the recipient can read what was sent) and shows a footnote explaining the claim button is intentionally absent for this build. The decryption itself works; the proof submission is the broken piece. Mainnet may not hit the same race.
+- **Auditor re-encryption viewer** is not built. Surface 6 issues and revokes grants but the `/auditor` route that would re-encrypt and decrypt granted ciphertexts is the obvious next step.
+- **Privy embedded wallets** can't drive the shielded session yet. The `IUmbraSigner` bridge expects a wallet-standard adapter; Privy needs a custom signer. Phantom and Backpack work fine.
 
 ---
 
-## Stuff that's stubbed
+## Architecture decisions I had to make
 
-**ZK-proven confidential transfers** — the mint is enabled with `ConfidentialTransferMint` and accounts are ready, but the actual transfers we send are still `TransferChecked` (amounts visible). Wiring `ConfidentialTransfer::Transfer` requires ZK proof generation in the browser via `@solana/zk-token-sdk`; that's the next migration step. The data model already matches.
+**Shielded session keypair instead of signing directly with Phantom.** Umbra's `createSignerFromWalletAccount` bridge to Phantom is broken in SDK v4. It produces transactions Phantom signs but the RPC rejects with "signature did not pass verification" — a Solana Kit vs. wallet-standard mismatch in the SDK itself. Rather than fork the SDK, I derive a deterministic shielded sub-wallet from the user's main wallet via one signMessage prompt. This turned out to be the right model anyway: holding the shielded balance under an address that can't be pattern-matched to the public identity is the whole point of a privacy product.
 
-**World ID claim gating** — `verify_world_id` stores the proof but the `claim_funds` instruction doesn't require `world_id_verified == true` in the demo build. Easy to add as a constraint check.
+**Funding the session is a one-click 0.05 SOL transfer from the user's main wallet.** Production would subsidize this from a Zalary treasury so users never see it. For the demo, one extra Phantom approval is acceptable.
 
-**Scheduled payroll** — the PayrollRun account logs when each run happened but there's no on-chain cron. Real scheduling would need a keeper or Clockwork-style trigger.
+**Token-2022 ConfidentialTransfer was scrapped in favour of Umbra.** The original plan was to use Token-2022's built-in confidential transfer extension. Umbra's Arcium MPC primitive turned out to be a better fit: it ships shielded UTXOs with selective disclosure (the compliance grant model) without requiring me to wire up ZK range proofs from scratch. The Token-2022 mint config is still in the program source as commented-out reference for the production path.
+
+**Privacy contract held.** Per `PRIVACY.md`: no third-party indexer in the read path; every chain read fires from the user's browser scoped to wallets they control. Umbra's indexer (`utxo-indexer.api-devnet.umbraprivacy.com`) is queried, but only for the user's own merkle proofs — it can't see plaintext amounts. The previous Covalent integration was scrapped in commit `1d774b7` because routing analytics queries through a centralised indexer contradicted the rest of the privacy thesis.
 
 ---
 
-## Running it
+## Stack
+
+- **Privacy layer:** Umbra SDK v4 + Arcium MXE on Solana devnet
+- **Frontend:** React 19 + Vite + TypeScript. UI primitives are deliberately small (`components/shielded/primitives.tsx`) with no new dependencies beyond what shipped with the SDK
+- **Wallet:** Phantom via `@solana/wallet-adapter-react`; Privy as a secondary login (not yet wired into the shielded layer)
+- **Off-ramp:** MoonPay sell widget for NGN, INR, BRL, EUR, USD
+- **Identity:** World ID via `@worldcoin/idkit` (devnet uses a mock proof, on-chain instruction stores nullifier)
+- **RPC:** Helius devnet for reads; Umbra's relayer (`relayer.api-devnet.umbraprivacy.com`) for claim submissions
+
+---
+
+## Running it locally
 
 ```bash
-cd app && npm install && npm run dev
+cd app
+npm install --legacy-peer-deps  # SDK v4 has a peer-dep collision with web-zk-prover v2; legacy mode picks the right tree
+npm run dev
 ```
 
-Needs:
-- Phantom wallet on devnet
-- Devnet SOL (airdrop 2 SOL to start)
-- The "Get 1000 test zUSDC" button on the Fund Treasury onboarding step mints test tokens straight to your wallet
+Then in the browser:
 
-Go to `localhost:5173`. Hit "I'm an Employer", complete the onboarding, fund the treasury, then open a second browser tab as `/employee` and connect a different wallet to see the employee side.
+1. Visit `localhost:5173`, click "I'm an employer", connect Phantom on devnet
+2. Approve the signMessage prompt (derives your shielded session)
+3. Pill in the top-right: click "Fund session (0.05 SOL)" → approve in Phantom
+4. Wait for "Shielded layer: ready"
+5. Treasury tab → Claim 1,000 dUSDC → Shield 500 dUSDC. Watch the encrypted balance fill in.
+6. Compliance tab → enter any auditor wallet that has gone through the same setup → Issue grant
+7. For shielded payroll: open `localhost:5173/employee` in an incognito window, connect a different Phantom, get a green pill, copy the session pubkey. Back in the employer window, add that as an employee with a salary. Run shielded payroll.
+
+The shielded session keypair is recoverable from your main wallet's signature, so disconnecting and reconnecting later still gives you access to the same encrypted balance.
 
 ---
 
-## Repository
+## Side tracks I'm submitting to
 
-`/Users/mac/Vibecoding/Zalary`
+- **Umbra ($10K).** Six-surface deep integration on Umbra's SDK; primary track.
+- **SNS Identity ($5K).** Three SNS surfaces shipped (forward resolution, favorite-domain reverse via `WalletName.tsx`, SNS Records v2 picture/twitter/email).
+- **Dune Frontier Data ($6K credit).** Six SQL queries live in `dune/queries/`; setup guide in `dune/ZALARY_DUNE.md`. Dashboard published under my Dune account.
+- **SuperteamNG x Raenest ($10K USDG).** Regional, Lagos contractor ICP. Same product, framed for emerging-market remote payroll.
 
-Program source: `programs/zalary/src/lib.rs`  
-Frontend: `app/src/`  
-Anchor config: `Anchor.toml`
+---
+
+## What I'd build next
+
+Three weeks to mainnet. The order of operations:
+
+1. Fix the BatchMerkleVerifier race so live claim ships. Either by retrying with a fresh Merkle proof at submission time, or by waiting for Umbra mainnet which may not hit the same devnet flake.
+2. Build the auditor re-encryption viewer at `/auditor`. The SDK has `getSharedCiphertextReencryptorForUserGrantFunction` ready; it just needs the UI.
+3. Bridge Privy embedded wallets into the shielded session so email-only employees can receive shielded payroll without installing Phantom.
+4. Wire ConfidentialTransfer auditor keys for the off-ramp partner who needs a fiat-amount audit trail. This is the "tax authority sees totals, nobody sees individual payments" pattern.
+5. First five paid pilots from Superteam Nigeria and India. Real payroll, mainnet, real money.

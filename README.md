@@ -2,10 +2,12 @@
 
 ![Zalary landing page](docs/images/landing.png)
 
-Confidential payroll for remote teams paying contractors across borders. USDC on Solana, salary amounts hidden on-chain, fiat off-ramp to local currency in the same app.
+Confidential payroll for remote teams paying contractors across borders. dUSDC on Solana, salary amounts hidden on-chain via Umbra's Arcium MPC primitive, fiat off-ramp to local currency in the same app.
 
 **Live demo**: [zalary.vercel.app](https://zalary.vercel.app)
-**Business plan**: [BUSINESS.md](./BUSINESS.md) (ICP, pricing, channels, 12-month roadmap)
+**Business plan**: [BUSINESS.md](./BUSINESS.md)
+**Hackathon writeup**: [SUBMISSION.md](./SUBMISSION.md)
+**Privacy contract**: [PRIVACY.md](./PRIVACY.md)
 **Hackathon**: [Colosseum Frontier 2026](https://www.colosseum.org/frontier)
 
 ---
@@ -16,67 +18,18 @@ Every founder I know in Lagos pays remote contractors through some mix of Binanc
 
 Stablecoin payroll in emerging markets is already happening at scale. It's just done badly. Zalary is the version where privacy is built into the rail, the off-ramp is one tap, and the founder doesn't have to teach their contractor what an ATA is.
 
-Why now: Solana shipped Token-2022 confidential transfers in 2024. The mint-level auditor key fits the regulatory direction the industry is moving in (selective disclosure, not anonymity). The primitive landed and nobody has shipped a payroll product on top of it yet.
+## How privacy works in this build
 
-## Why a VC should pay attention
+The privacy layer is Umbra, an Arcium-MXE-backed mixer on Solana. Six surfaces ship against the Umbra SDK:
 
-| | Why it matters |
-|---|---|
-| Real founder-market fit | I send USDC payroll to friends in Lagos every month. The pain is something I live |
-| Defensible primitive | Built on Token-2022 ConfidentialTransfer. Centralized incumbents (Deel, Toku, Settlr) can't ship this without rebuilding on Solana |
-| Compliance is in the design | On-chain auditor / viewing key from day one. Not retrofitted after a Tornado-style incident |
-| Channel I can own | Superteam regional chapters in Nigeria, India, Brazil, Vietnam, Turkey. US-based competitors can't fake those relationships |
-| Shipping speed | Anchor program upgraded twice this week. Token-2022 mint with ConfidentialTransfer extension live. Pause + auditor + close primitives all on-chain |
+1. Shielded session registration tied to the user's main wallet (one signMessage prompt, deterministic seed, no second key to manage)
+2. Public-to-encrypted dUSDC deposit through Umbra's encrypted balance primitive
+3. Receiver-claimable UTXO disbursement, one per employee, no on-chain employer-to-employee link
+4. Employee inbox scan that decrypts incoming UTXOs only the recipient can read
+5. Encrypted-to-public unshielding back into a normal ATA before off-ramp
+6. Selective-disclosure compliance grants to specific auditor wallets, revocable on-chain
 
-For pricing, take rate, unit economics and the 12-month plan to $50K MRR, see [BUSINESS.md](./BUSINESS.md).
-
----
-
-## How it works
-
-1. Employer creates an org on-chain. `create_organization` initializes the org PDA and a Token-2022 USDC treasury account
-2. Employer adds employees. Each employee gets a PDA at `[b"employee", org_pda, wallet]` with their wallet and an encrypted salary blob
-3. Treasury funded. Employer drops USDC into the org's treasury via `fund_treasury`. The faucet button on the onboarding screen mints test zUSDC straight to the employer's wallet
-4. Payroll runs. `run_payroll` transfers from treasury to each employee's ATA and writes a `PayrollRun` log
-5. Employees claim. They connect a wallet, see their balance, and call `claim_funds`
-6. World ID gates claims to verified humans. The nullifier hash is stored on the employee PDA so a person can't double-claim across wallets
-7. Off-ramp. After claiming, employees convert USDC to NGN, INR, BRL, KES, ARS, USD, or EUR through MoonPay. No separate exchange account
-
----
-
-## On-chain primitives
-
-| Instruction | What it does |
-|---|---|
-| `create_organization(name)` | Creates org PDA and Token-2022 treasury |
-| `add_employee(wallet, encrypted_salary)` | Registers an employee under the org |
-| `fund_treasury(amount)` | Deposits USDC into the treasury (auto-creates the funder's ATA if missing) |
-| `run_payroll(amount)` | Transfers from treasury to one employee, logs a PayrollRun |
-| `claim_funds(amount)` | Employee claims their allocation |
-| `update_salary(new_encrypted_salary)` | Updates an employee's salary blob |
-| `verify_world_id(nullifier_hash)` | Stores a World ID proof on the employee PDA |
-| `withdraw_treasury(amount)` | Authority withdraws from the vault |
-| `pause_organization` / `resume_organization` | On-chain kill switch. `run_payroll` rejects with `OrganizationPaused` (6009) while paused |
-| `set_auditor(pubkey)` / `clear_auditor` | Designate a third-party wallet for selective-disclosure access. Stored on `OrgAuditor` PDA at `["auditor", org_pda]` |
-| `close_organization` | Closes the org and treasury and returns rent to authority. Treasury must be empty first |
-
-Deployed on Solana devnet at `FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH`.
-
----
-
-## Tech
-
-| Layer | What |
-|---|---|
-| Blockchain | Solana devnet (mainnet planned post-hackathon) |
-| Smart contracts | Anchor 0.30.1 (Rust), built on `anchor_spl::token_interface` so the program transparently accepts classic SPL and Token-2022 mints |
-| Privacy | Token-2022 with ConfidentialTransfer extension enabled on the mint (ZK transfer path lands next sprint) |
-| Frontend | React, TypeScript, Vite |
-| Wallet | Phantom via `@solana/wallet-adapter` |
-| Employee onboarding | Privy social login |
-| Identity | World ID (proof of personhood) |
-| Off-ramp | MoonPay sell widget |
-| Test token | zUSDC, Token-2022, decimals 6, mint `AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD` |
+Full architecture in [SUBMISSION.md](./SUBMISSION.md).
 
 ---
 
@@ -84,72 +37,47 @@ Deployed on Solana devnet at `FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH`.
 
 ```bash
 cd app
-cp .env.example .env   # fill in your keys
-npm install
+npm install --legacy-peer-deps
 npm run dev
 ```
 
-You need:
-- Phantom on devnet
-- ~2 SOL on your address: `solana airdrop 2 <your-address> --url devnet`
-- App-side faucet button on the Fund Treasury onboarding step gives you 1000 test zUSDC per click
+You need a Phantom wallet on devnet with ~0.1 SOL. The shielded session funds itself from your main wallet via one click. Test dUSDC comes from Umbra's devnet faucet, also one click inside the app.
 
 App runs at `localhost:5173`. Employer flow at `/employer`, employee at `/employee`.
-
-Building the Anchor program locally requires the Solana toolchain (`solana-cli` + `cargo-build-sbf`).
-
----
 
 ## Project structure
 
 ```
 Zalary/
-├── programs/zalary/         Anchor program (Rust)
-│   └── src/lib.rs
+├── programs/zalary/             Legacy Anchor org program (pre-Umbra)
 ├── app/
-│   ├── api/
-│   │   └── faucet.ts        Vercel function that mints test zUSDC
 │   ├── src/
-│   │   ├── pages/
-│   │   │   ├── Landing.tsx
-│   │   │   ├── employer/    Dashboard, Onboarding, PayrollPanel, EmployeeDetail
-│   │   │   └── employee/    Portal (balance, claim, World ID, MoonPay)
-│   │   ├── lib/
-│   │   │   ├── program.ts          Anchor helpers + PDA finders
-│   │   │   ├── salary_crypto.ts    Salary blob encryption (placeholder)
-│   │   │   └── worldid.ts          World ID config
-│   │   └── hooks/useProgram.ts
-│   └── .env.example
-├── BUSINESS.md              ICP, pricing, unit economics, 12-month plan
-├── SUBMISSION.md            Hackathon submission notes
-└── Anchor.toml
+│   │   ├── contexts/UmbraProvider.tsx       Builds the Umbra client + shielded session
+│   │   ├── lib/umbra.ts                     Session derivation, faucet client, devnet endpoints
+│   │   ├── components/
+│   │   │   ├── ShieldedInbox.tsx            Surface 4 + 5: scan + unshield (employee)
+│   │   │   ├── ShieldedBalanceCard.tsx      Dashboard balance summary
+│   │   │   ├── UmbraStatusPill.tsx          Registration state in the top nav
+│   │   │   └── shielded/primitives.tsx      Shared UI primitives
+│   │   └── pages/employer/
+│   │       ├── ShieldedTreasuryPanel.tsx    Surface 2: faucet + shield
+│   │       ├── ShieldedPayrollPanel.tsx     Surface 3: payroll disbursement
+│   │       └── ShieldedCompliancePanel.tsx  Surface 6: auditor grants
+└── dune/                        SQL queries for the Dune Frontier Data track
 ```
 
----
+## Sponsor tracks
 
-## What's actually live on devnet
+Submitting to Umbra, SNS Identity, Dune Frontier Data, and SuperteamNG x Raenest. Side-track status and what's shipped per track is in [SUBMISSION.md](./SUBMISSION.md).
 
-- Org creation, employee registration, treasury funding, payroll runs, claims, withdrawals, all execute real Anchor instructions and land on-chain
-- Employee portal reads live USDC balance from the token account
-- World ID verification fires `verify_world_id` and stores the proof on the employee PDA
-- MoonPay sell widget on the employee portal
-- Privy social login for employees who don't have a wallet yet
-- Pause / resume kills payroll runs at the protocol level
-- Auditor / viewing-key designation lives in its own PDA, gated to the org authority
-- Close-organization auto-drains the treasury back to the authority's ATA in the same tx before closing
+## Privacy contract
 
----
+[PRIVACY.md](./PRIVACY.md) is the line in the sand for what crosses the wire vs. what stays local. No third-party indexer in the read path. Browser-originated calls only, scoped to wallets the user controls.
 
-## Honest status (submission window)
+## What's not done
 
-- The on-chain program runs on `anchor_spl::token_interface`. zUSDC (`AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD`) is a Token-2022 mint with `ConfidentialTransferMint` enabled in auto-approve mode. Treasury and employee ATAs are Token-2022 ATAs ready to participate in confidential balances
-- Transfers themselves still use `TransferChecked`. The ZK-proven `ConfidentialTransfer::Transfer` (ElGamal-encrypted amounts, range proofs generated in the browser via `@solana/zk-token-sdk`) is the next migration step. The mint and accounts are already configured for it
-- `salary_crypto.ts` is a structural placeholder, not a security boundary. The Employee PDA carries a 64-byte AES blob in the slot the production confidential balance will replace
-- World ID is gated client-side in the demo flow so reviewers can test without a World App. The program-side `require!` ships with mainnet
-- Auditor / viewing-key field is on-chain. The wiring to the mint's actual auditor key happens together with the ConfidentialTransfer migration
+- Live claim from Surface 4 is disabled due to a circuit-vs-indexer race on devnet. The decryption works; the proof submission is the broken piece. Detailed in SUBMISSION.md.
+- The `/auditor` route that re-encrypts and decrypts granted ciphertexts is the obvious next step for Surface 6 but is not built.
+- Privy embedded wallets can't drive the shielded session yet. Phantom and Backpack work fine.
 
----
-
-## License
-
-MIT
+Anchor program scaffolding from the pre-Umbra build is still in `programs/zalary/src/lib.rs` for the legacy on-chain claim path; it's no longer wired into the demo flow.

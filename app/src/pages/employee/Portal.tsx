@@ -1,63 +1,36 @@
 import { useState, useCallback, useEffect } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { useWallet, useConnection } from '@solana/wallet-adapter-react'
+import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { PublicKey } from '@solana/web3.js'
-import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token'
 import TopNav from '../../components/TopNav'
-import PrivyClaimCard from './PrivyClaimCard'
+import ShieldedInbox from '../../components/ShieldedInbox'
 import { openMoonPaySell } from '../../lib/moonpay'
 import { verifyWithWorldId, type WorldIdProof } from '../../lib/worldid'
 import { useProgram } from '../../hooks/useProgram'
-import { verifyWorldId as verifyWorldIdOnChain, findOrganizationPda, claimFunds as claimFundsOnChain } from '../../lib/program'
-
-const USDC_MINT = new PublicKey('AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD')
+import { verifyWorldId as verifyWorldIdOnChain, findOrganizationPda } from '../../lib/program'
 
 export default function Portal() {
   const [selectedCurrency, setSelectedCurrency] = useState('USD')
   const { ready, authenticated, user, login, logout } = usePrivy()
   const [worldIdProof, setWorldIdProof] = useState<WorldIdProof | null>(null)
   const [verifying, setVerifying] = useState(false)
-  const [claiming, setClaiming] = useState(false)
-  const [claimTx, setClaimTx] = useState<string | null>(null)
-  const [claimError, setClaimError] = useState<string | null>(null)
-  const [usdcBalance, setUsdcBalance] = useState(0)
-  const [usdcDisplayBalance, setUsdcDisplayBalance] = useState('--')
-  const { publicKey, sendTransaction, connected, wallet, connect } = useWallet()
-  const { connection } = useConnection()
+  const { publicKey, connected, wallet, connect } = useWallet()
   const { setVisible } = useWalletModal()
   const program = useProgram()
 
   const handleConnect = () => setVisible(true)
 
-  // Auto-connect after wallet selection from modal
   useEffect(() => {
     if (wallet && !connected) {
       connect().catch(() => {})
     }
   }, [wallet, connected, connect])
 
-  useEffect(() => {
-    if (!publicKey || !connection) return
-    const ata = getAssociatedTokenAddressSync(USDC_MINT, publicKey, false, TOKEN_2022_PROGRAM_ID)
-    connection.getTokenAccountBalance(ata)
-      .then(({ value }) => {
-        setUsdcBalance(Number(value.amount) || 0)
-        setUsdcDisplayBalance(value.uiAmountString || '0.00')
-      })
-      .catch(() => {
-        setUsdcBalance(0)
-        setUsdcDisplayBalance('0.00')
-      })
-  }, [publicKey, connection, claimTx])
-
   // World ID verification — devnet demo path uses the mock helper from
-  // lib/worldid.ts, which fabricates a deterministic device-level proof so
-  // judges/contractors without World App installed can still demo the claim
-  // flow. The on-chain `verify_world_id` instruction still runs and stores a
-  // nullifier on the Employee PDA. The IDKit Request widget that previously
-  // gated this required a signed rp_context (server-signed via signRequest);
-  // wiring that up is part of the mainnet migration, not the hackathon demo.
+  // lib/worldid.ts. The on-chain `verify_world_id` instruction stores a
+  // nullifier on the Employee PDA so the same human can't double-claim
+  // shielded payroll. Mainnet swaps the mock for the real IDKit widget.
   const handleVerifyDemo = useCallback(async () => {
     setVerifying(true)
     try {
@@ -80,47 +53,6 @@ export default function Portal() {
       setVerifying(false)
     }
   }, [program, publicKey])
-
-  const handleClaim = useCallback(async () => {
-    if (!connected || !publicKey) {
-      setClaimError('Connect your wallet first')
-      return
-    }
-    if (usdcBalance <= 0) {
-      setClaimError('No claimable balance')
-      return
-    }
-    // Client-side World ID gate. The mainnet build moves this check into the
-    // program itself (verify world_id_verified == true on the Employee PDA
-    // inside claim_funds). Until then, enforce in the UI so the demo flow
-    // matches the production behavior.
-    if (!worldIdProof) {
-      setClaimError('Verify with World ID before claiming')
-      return
-    }
-    setClaiming(true)
-    setClaimError(null)
-    setClaimTx(null)
-    try {
-      const storedAuthority = localStorage.getItem('zalary_org_authority')
-      if (!program) throw new Error('Wallet not connected to Solana program. Reconnect and retry.')
-      if (!storedAuthority) {
-        throw new Error('Organization not registered on this device. Ask your employer to share their org link, or connect from the same browser used during onboarding.')
-      }
-      const authorityPk = new PublicKey(storedAuthority)
-      const [orgPda] = findOrganizationPda(authorityPk)
-      const employeeAta = getAssociatedTokenAddressSync(USDC_MINT, publicKey, false, TOKEN_2022_PROGRAM_ID)
-      const { tx } = await claimFundsOnChain(program, orgPda, employeeAta, employeeAta, USDC_MINT, usdcBalance)
-      setClaimTx(tx)
-      setUsdcBalance(0)
-      setUsdcDisplayBalance('0.00')
-    } catch (err: any) {
-      console.error('Claim tx failed:', err)
-      setClaimError(err?.message || 'Transaction failed')
-    } finally {
-      setClaiming(false)
-    }
-  }, [connected, publicKey, program, sendTransaction, connection, usdcBalance, worldIdProof])
 
   // Gate: show login screen if neither Privy authenticated nor wallet connected
   const isLoggedIn = (ready && authenticated) || connected
@@ -204,185 +136,81 @@ export default function Portal() {
       <TopNav variant="employee" />
 
       <main>
-      <div style={{ padding: '0 20px' }}>
-        <PrivyClaimCard />
-      </div>
-      {/* Authenticated header bar — sits inside <main> so it inherits the
-          padding-top: 64px that clears the fixed TopNav. Previously rendered
-          outside main and got buried under the nav, making Verify Identity
-          unclickable. */}
-      <div style={{ padding: '0 20px', marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-              {user?.email?.address || user?.google?.name || user?.twitter?.username || 'Logged in'}
-            </span>
-            <button
-              onClick={logout}
-              style={{
-                background: 'transparent',
-                border: '1px solid rgba(108,92,231,0.4)',
-                color: '#6c5ce7',
-                padding: '6px 14px',
-                borderRadius: 8,
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              Logout
-            </button>
-          </div>
-
+      {/* Account header — pinned to the top-left under the nav logo, with
+          breathing room from the fixed top-nav. */}
+      <div style={{ padding: '24px 20px 0', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+            {user?.email?.address || user?.google?.name || user?.twitter?.username || 'Logged in'}
+          </span>
+          <button
+            onClick={logout}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              color: 'var(--text-secondary)',
+              padding: '6px 14px',
+              borderRadius: 'var(--radius)',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Logout
+          </button>
           {worldIdProof ? (
             <span style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              background: 'rgba(0,200,83,0.12)',
-              color: '#00c853',
+              background: 'rgba(46,213,115,0.12)',
+              color: '#2ed573',
               padding: '6px 14px',
-              borderRadius: 8,
-              fontSize: 13,
+              borderRadius: 'var(--radius)',
+              fontSize: 12,
               fontWeight: 600,
             }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               Verified
             </span>
           ) : (
-            <>
-              <button
-                onClick={handleVerifyDemo}
-                disabled={verifying}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid rgba(108,92,231,0.4)',
-                  color: '#6c5ce7',
-                  padding: '8px 18px',
-                  borderRadius: 10,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: verifying ? 'wait' : 'pointer',
-                  opacity: verifying ? 0.6 : 1,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-                title="Devnet demo: synthesizes a device-level proof and writes a nullifier to your Employee PDA. Mainnet migration replaces this with the real IDKit flow."
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                {verifying ? 'Verifying…' : 'Verify Identity (demo)'}
-              </button>
-              {/* IDKitRequestWidget removed: devnet demo uses the mock helper
-                  above. Mainnet migration restores the real widget, which
-                  requires a server-signed rp_context via signRequest() from
-                  @worldcoin/idkit-core/signing. */}
-            </>
+            <button
+              onClick={handleVerifyDemo}
+              disabled={verifying}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--accent-subtle)',
+                color: 'var(--accent)',
+                padding: '6px 14px',
+                borderRadius: 'var(--radius)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: verifying ? 'wait' : 'pointer',
+                opacity: verifying ? 0.6 : 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+              title="Devnet demo: synthesizes a device-level proof and writes a nullifier to your Employee PDA. Mainnet migration replaces this with the real IDKit flow."
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              {verifying ? 'Verifying…' : 'Verify Identity (demo)'}
+            </button>
           )}
         </div>
       </div>
 
-        <div className="employee-portal">
-          {/* Balance Card */}
-          <div className="balance-card-wrapper">
-            <div className="balance-card-inner">
-              <div className="balance-label">Available Balance</div>
-              <div className="balance-amount mono">{claimTx ? '$0.00' : `$${usdcDisplayBalance}`}</div>
-              <div className="balance-caption">
-                {claimTx ? (
-                  <>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    Claimed successfully
-                  </>
-                ) : (
-                  <>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    Just for your eyes
-                  </>
-                )}
-              </div>
-              {claimError && (
-                <div style={{ fontSize: 13, color: 'var(--error)', marginBottom: 8 }}>{claimError}</div>
-              )}
-              {claimTx && (
-                <div style={{ marginBottom: 8 }}>
-                  <a
-                    href={`https://solscan.io/tx/${claimTx}?cluster=devnet`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)', textDecoration: 'underline' }}
-                  >
-                    View on Solscan: {claimTx.slice(0, 8)}...{claimTx.slice(-8)}
-                  </a>
-                </div>
-              )}
-              <div className="balance-buttons">
-                <button className="bal-btn claim" onClick={handleClaim} disabled={claiming || !!claimTx || !connected || usdcBalance <= 0}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-                  {claiming ? 'Claiming...' : claimTx ? 'Claimed' : 'Claim'}
-                </button>
-                <button className="bal-btn cashout">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                  Cash Out
-                </button>
-              </div>
-            </div>
-          </div>
+      <div style={{ padding: '0 20px', maxWidth: 760, margin: '0 auto', width: '100%' }}>
+        <ShieldedInbox />
+      </div>
 
-          {/* Quick Stats */}
-          <div className="quick-stats">
-            <div className="stat-card">
-              <div className="stat-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              </div>
-              <div className="stat-label">Next Payment</div>
-              <div className="stat-value mono">—</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-              </div>
-              <div className="stat-label">This Month</div>
-              <div className="stat-value mono">${usdcDisplayBalance}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-              </div>
-              <div className="stat-label">Total Earned</div>
-              <div className="stat-value mono">—</div>
-            </div>
-          </div>
-
-          {/* Payment History */}
-          <div className="payment-history">
-            <h3>Payment History</h3>
-            {claimTx ? (
-              <div className="timeline">
-                <div className="timeline-item">
-                  <div className="timeline-dot"></div>
-                  <div className="timeline-content">
-                    <div className="timeline-meta">
-                      <span className="timeline-date">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    </div>
-                    <div className="timeline-type">Claim</div>
-                    <div className="timeline-bottom">
-                      <span className="timeline-amount mono">${usdcDisplayBalance}</span>
-                      <a className="timeline-tx" href={`https://solscan.io/tx/${claimTx}?cluster=devnet`} target="_blank" rel="noopener noreferrer">View Tx</a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ padding: '24px 16px', background: 'var(--bg-card)', border: '1px dashed var(--border)', borderRadius: 'var(--radius)', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
-                No payments yet. Claims and salary payments will appear here.
-              </div>
-            )}
-          </div>
-
-          {/* Cash Out */}
+        {/* Cash Out — outer wrapper matches the inbox's 760px column +
+            20px gutter. Inner div keeps the native .cashout-section padding
+            so it visually rhymes with the inbox card. */}
+        <div style={{ padding: '0 20px', maxWidth: 760, margin: '48px auto 0', width: '100%' }}>
           <div className="cashout-section">
             <h3>Cash Out</h3>
-            <p className="cashout-desc">Convert to local currency via MoonPay</p>
+            <p className="cashout-desc">After unshielding, convert your public dUSDC to local currency via MoonPay.</p>
             <div className="currency-chips">
               {['USD', 'EUR', 'NGN', 'INR', 'BRL'].map((currency) => (
                 <button
@@ -398,11 +226,6 @@ export default function Portal() {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               Open MoonPay
             </button>
-          </div>
-          <div style={{ padding: '0 20px', marginTop: 12 }}>
-            <a href="/employee/income" style={{ fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'underline' }}>
-              View on-chain activity log
-            </a>
           </div>
         </div>
       </main>

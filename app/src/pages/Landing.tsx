@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
@@ -6,8 +7,18 @@ import { isDemoConfigured } from '../hooks/useDemoMode'
 
 export default function Landing() {
   const navigate = useNavigate()
-  const { connected } = useWallet()
+  const { connected, wallet, connect } = useWallet()
   const { setVisible } = useWalletModal()
+
+  // The wallet-adapter modal calls `select(name)` on click but does NOT chain
+  // into `connect()`. Without this effect the modal closes silently and the
+  // user has to refresh for autoConnect to pick the selection up. Same fix
+  // already applied in AuthGate / TopNav / Portal — Landing was missing it.
+  useEffect(() => {
+    if (wallet && !connected) {
+      connect().catch(() => { /* user rejected — fine */ })
+    }
+  }, [wallet, connected, connect])
 
   const goTo = (path: string) => {
     window.scrollTo(0, 0)

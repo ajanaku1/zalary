@@ -1,8 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { PublicKey } from '@solana/web3.js'
-import { encryptSalary, decryptSalary } from '../../lib/salary_crypto'
-import { useProgram } from '../../hooks/useProgram'
-import { findOrganizationPda, updateSalary as updateSalaryOnChain } from '../../lib/program'
+import { decryptSalary } from '../../lib/salary_crypto'
 import WalletName from '../../components/WalletName'
 
 export interface Employee {
@@ -33,7 +30,6 @@ export default function EmployeeDetail({ open, onClose, employee, onSalarySet, o
   const [encrypting, setEncrypting] = useState(false)
   const [encrypted, setEncrypted] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const program = useProgram()
 
   useEffect(() => {
     if (open && employee) {
@@ -64,6 +60,10 @@ export default function EmployeeDetail({ open, onClose, employee, onSalarySet, o
   }, [open, employee])
 
   const handleEncryptAndSave = useCallback(async () => {
+    // Salary "encryption" used to live here as a placeholder AES-256-GCM blob
+    // before Umbra. With shielded payroll, the only privacy that matters is
+    // the Umbra UTXO ciphertext on-chain — local salary plaintext is fine and
+    // never leaves the browser. So this just persists the amount + frequency.
     if (!employee) return
     const amount = parseFloat(salaryInput)
     if (!amount || amount <= 0) {
@@ -73,24 +73,16 @@ export default function EmployeeDetail({ open, onClose, employee, onSalarySet, o
     setEncrypting(true)
     setError(null)
     try {
-      const encryptedData = await encryptSalary(amount, employee.wallet)
-      onSalarySet(employee.wallet, amount, encryptedData, frequency)
+      // Empty Uint8Array kept for the existing onSalarySet signature; the
+      // parent now ignores this field when persisting to localStorage.
+      onSalarySet(employee.wallet, amount, new Uint8Array(), frequency)
       setEncrypted(true)
-
-      if (program && employee.walletFull) {
-        try {
-          const [orgPda] = findOrganizationPda(program.provider.publicKey!)
-          await updateSalaryOnChain(program, orgPda, new PublicKey(employee.walletFull), Array.from(encryptedData))
-        } catch (chainErr) {
-          console.warn('update_salary on-chain failed (non-blocking):', chainErr)
-        }
-      }
     } catch (err: any) {
-      setError(err?.message || 'Encryption failed')
+      setError(err?.message || 'Save failed')
     } finally {
       setEncrypting(false)
     }
-  }, [employee, salaryInput, frequency, onSalarySet, program])
+  }, [employee, salaryInput, frequency, onSalarySet])
 
   const lockSvg = (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
@@ -135,7 +127,6 @@ export default function EmployeeDetail({ open, onClose, employee, onSalarySet, o
             </span>
           </div>
 
-          {/* Encrypted badge */}
           {encrypted && (
             <div style={{
               display: 'inline-flex',
@@ -150,7 +141,7 @@ export default function EmployeeDetail({ open, onClose, employee, onSalarySet, o
               marginBottom: 20,
             }}>
               {lockSvg}
-              Salary: Encrypted
+              Saved
             </div>
           )}
 
@@ -212,22 +203,17 @@ export default function EmployeeDetail({ open, onClose, employee, onSalarySet, o
             <p style={{ color: 'var(--error)', fontSize: 13, marginBottom: 16 }}>{error}</p>
           )}
 
-          {/* Encrypt & Save Button */}
           <button
             className="qa-btn primary-action"
             onClick={handleEncryptAndSave}
             disabled={encrypting}
             style={{ width: '100%', justifyContent: 'center', padding: '12px 20px', fontSize: 14 }}
           >
-            {encrypting ? (
-              'Encrypting...'
-            ) : (
-              <>
-                {lockSvg}
-                Encrypt & Save
-              </>
-            )}
+            {encrypting ? 'Saving…' : 'Save salary'}
           </button>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
+            Salary stays in your browser. The amount is only encrypted on-chain when you run shielded payroll, where it becomes an Umbra UTXO.
+          </p>
 
           {/* Remove Employee */}
           {onRemove && (

@@ -1,13 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useConnection } from '@solana/wallet-adapter-react'
-import { PublicKey } from '@solana/web3.js'
-import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token'
 import { resolveSolDomain } from '../../lib/sns'
 import { isValidSolanaAddress } from '../../lib/utils'
-import { useProgram } from '../../hooks/useProgram'
-import { createOrganization as createOrgOnChain, fundTreasury as fundTreasuryOnChain, findOrganizationPda } from '../../lib/program'
-
-const USDC_MINT = new PublicKey('AY6ZDfcEqzRKmjk4SJ6s5WUtozYGmgBmHds8M5JhxmnD')
 
 interface OnboardingProps {
   onComplete: (data: {
@@ -76,7 +70,9 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   // Confetti for step 6
   const [confettiDots, setConfettiDots] = useState<Array<{ id: number; left: string; color: string; delay: string; duration: string; size: string }>>([])
 
-  const program = useProgram()
+  // Onboarding no longer touches the legacy on-chain Anchor program. Org name,
+  // employee list, schedule, budget all flow into local state via onComplete.
+  // The Solana connection is still needed for SNS .sol domain resolution.
   const { connection } = useConnection()
 
   const isSolDomain = walletInput.trim().endsWith('.sol')
@@ -119,34 +115,20 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setOrgError(null)
     setTxSignature(null)
     try {
-      if (!program) {
-        throw new Error('Wallet not connected to Solana program. Connect Phantom (or another Solana wallet that exposes signTransaction) and retry.')
-      }
-
-      // Block if a stale org already lives at this authority's PDA — the program
-      // would reject `init` with "already in use" and the user would have no idea
-      // why. Surface a real error and direct them to the dashboard reset.
-      const authority = program.provider.publicKey!
-      const [orgPda] = findOrganizationPda(authority)
-      const existing = await (program.account as any).organization.fetchNullable(orgPda)
-      if (existing) {
-        throw new Error(
-          `An organization already exists at ${orgPda.toBase58().slice(0, 8)}…${orgPda.toBase58().slice(-4)} for this wallet. ` +
-          `Open the dashboard, scroll to "Danger zone", click "Reset organization" to close it on-chain, then retry. ` +
-          `Or connect a different wallet to start a fresh org.`,
-        )
-      }
-
-      const { tx } = await createOrgOnChain(program, orgName.trim(), USDC_MINT)
-      setTxSignature(tx)
-      setTimeout(() => goToStep(3), 800)
+      // Umbra-shielded orgs do not require an on-chain org account — payroll
+      // runs disburse from the employer's encrypted balance into per-employee
+      // UTXOs, and the org name + employee list live in localStorage. So
+      // "create org" is now a local-only action, no Anchor tx, no treasury PDA.
+      if (!orgName.trim()) throw new Error('Enter an organization name')
+      setTxSignature('local')
+      setTimeout(() => goToStep(3), 400)
     } catch (err: any) {
       console.error('Create org failed:', err)
-      setOrgError(err?.message ?? 'Transaction failed')
+      setOrgError(err?.message ?? 'Failed')
     } finally {
       setCreating(false)
     }
-  }, [orgName, program, goToStep])
+  }, [orgName, goToStep])
 
   const handleAddEmployee = useCallback(() => {
     setAddError(null)
@@ -174,63 +156,23 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   }, [walletInput, nickname, salaryInput, resolvedAddress, isSolDomain, isValidSolanaAddress])
 
   const [funding, setFunding] = useState(false)
-  const [fundTx, setFundTx] = useState<string | null>(null)
   const [fundError, setFundError] = useState<string | null>(null)
 
-  // Test-zUSDC faucet — devnet-only
-  const [requestingFaucet, setRequestingFaucet] = useState(false)
-  const [faucetSig, setFaucetSig] = useState<string | null>(null)
-  const [faucetError, setFaucetError] = useState<string | null>(null)
-  const [faucetReceived, setFaucetReceived] = useState(0)
-
-  const handleRequestFaucet = useCallback(async () => {
-    if (!program?.provider.publicKey) {
-      setFaucetError('Connect your wallet first')
-      return
-    }
-    setRequestingFaucet(true)
-    setFaucetError(null)
-    try {
-      const wallet = program.provider.publicKey.toBase58()
-      const res = await fetch(`/api/faucet?wallet=${wallet}`, { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || 'Faucet failed')
-      setFaucetSig(data.sig)
-      setFaucetReceived(prev => prev + (data.amount || 1000))
-    } catch (err: any) {
-      setFaucetError(err?.message || 'Faucet failed')
-    } finally {
-      setRequestingFaucet(false)
-    }
-  }, [program])
-
   const handleFund = useCallback(async () => {
+    // Treasury funding now happens through the shielded session: the user
+    // claims dUSDC from Umbra's faucet (or sends dUSDC to their session ATA)
+    // and shields it from the dashboard. This step is a placeholder that just
+    // records an intended budget; no on-chain tx fires here.
     const amount = parseFloat(treasuryAmount)
     if (!amount || amount <= 0) return
     setFunding(true)
     setFundError(null)
     try {
-      if (!program) {
-        throw new Error('Wallet not connected to Solana program. Reconnect and retry.')
-      }
-      const authority = program.provider.publicKey!
-      const [orgPda] = findOrganizationPda(authority)
-      const signerAta = getAssociatedTokenAddressSync(USDC_MINT, authority, false, TOKEN_2022_PROGRAM_ID)
-      const { tx } = await fundTreasuryOnChain(
-        program,
-        orgPda,
-        Math.round(amount * 1_000_000),
-        signerAta,
-        USDC_MINT,
-      )
-      setFundTx(tx)
       setFunded(true)
-    } catch (err: any) {
-      setFundError(err?.message || 'Transaction failed')
     } finally {
       setFunding(false)
     }
-  }, [treasuryAmount, program])
+  }, [treasuryAmount])
 
   const spawnConfetti = useCallback(() => {
     const colors = ['#6c5ce7', '#e17055', '#00b894', '#fdcb6e', '#5a4bd1']
@@ -417,15 +359,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
               {txSignature && (
                 <div style={{ padding: '12px 16px', background: 'rgba(0,184,148,0.12)', borderRadius: 8, fontSize: 13, marginBottom: 16 }}>
-                  Organization registered on-chain.{' '}
-                  <a
-                    href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: 'var(--accent)', textDecoration: 'underline' }}
-                  >
-                    View tx
-                  </a>
+                  Organization saved. Payroll will run from your shielded session — there is no public on-chain org account, by design.
                 </div>
               )}
 
@@ -627,10 +561,11 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 Back
               </button>
               <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px', marginBottom: 8 }}>
-                Fund your treasury
+                Plan your shielded budget
               </h2>
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
-                Deposit USDC to your organization's vault. This is where payroll funds are drawn from.
+                Zalary runs payroll from your <strong>shielded session</strong> — an Umbra-encrypted balance only your wallet can decrypt.
+                Set a target monthly budget here; you'll fund the actual shielded balance in the next step from the dashboard.
               </p>
 
               <div style={{
@@ -639,43 +574,16 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 border: '1px dashed rgba(108,92,231,0.3)',
                 borderRadius: 'var(--radius)',
                 marginBottom: 20,
+                fontSize: 13,
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
               }}>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                  No devnet zUSDC yet? Mint test tokens straight to your wallet — devnet only, 1000 zUSDC per click.
-                </div>
-                <button
-                  onClick={handleRequestFaucet}
-                  disabled={requestingFaucet || !program}
-                  style={{
-                    background: 'transparent',
-                    color: 'var(--accent)',
-                    border: '1px solid var(--accent)',
-                    padding: '8px 14px',
-                    borderRadius: 'var(--radius)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: requestingFaucet || !program ? 'not-allowed' : 'pointer',
-                    opacity: requestingFaucet || !program ? 0.5 : 1,
-                  }}
-                >
-                  {requestingFaucet ? 'Minting…' : faucetReceived > 0 ? `Received ${faucetReceived} zUSDC — click for 1000 more` : 'Get 1000 test zUSDC'}
-                </button>
-                {faucetSig && (
-                  <a
-                    href={`https://solscan.io/tx/${faucetSig}?cluster=devnet`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ display: 'block', marginTop: 8, fontSize: 12, color: 'var(--accent)' }}
-                  >
-                    View mint tx: {faucetSig.slice(0, 8)}…{faucetSig.slice(-8)}
-                  </a>
-                )}
-                {faucetError && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--error)' }}>{faucetError}</div>}
+                After onboarding, the dashboard's <strong>Treasury</strong> tab gives you a one-click faucet for devnet dUSDC and a "Shield" button that moves it into your encrypted balance. No legacy on-chain treasury account is created.
               </div>
 
               <div style={{ marginBottom: 20 }}>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                  Amount (USDC)
+                  Target budget (dUSDC)
                 </label>
                 <div style={{ position: 'relative' }}>
                   <span style={{
@@ -709,24 +617,17 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--success)' }}>Treasury funded</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--success)' }}>Budget set</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>Balance</span>
-                    <span className="mono" style={{ fontWeight: 600 }}>${parseFloat(treasuryAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDC</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>Target</span>
+                    <span className="mono" style={{ fontWeight: 600 }}>{parseFloat(treasuryAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })} dUSDC</span>
                   </div>
                 </div>
               )}
 
               {fundError && (
                 <p style={{ color: 'var(--error)', fontSize: 13, marginBottom: 12 }}>{fundError}</p>
-              )}
-              {fundTx && (
-                <div style={{ fontSize: 13, marginBottom: 12 }}>
-                  <a href={`https://solscan.io/tx/${fundTx}?cluster=devnet`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
-                    View tx: {fundTx.slice(0, 8)}...{fundTx.slice(-8)}
-                  </a>
-                </div>
               )}
               {!funded ? (
                 <button
@@ -738,8 +639,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                     cursor: !treasuryAmount || parseFloat(treasuryAmount) <= 0 || funding ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /></svg>
-                  {funding ? 'Signing...' : 'Fund Treasury'}
+                  Save budget
                 </button>
               ) : (
                 <button onClick={() => goToStep(5)} style={primaryBtnStyle}>

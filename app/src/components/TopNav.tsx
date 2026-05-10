@@ -6,9 +6,10 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { usePrivy } from '@privy-io/react-auth'
 import { useRole } from '../contexts/RoleContext'
 import { truncateAddress } from '../lib/utils'
+import UmbraStatusPill from './UmbraStatusPill'
 
 type TopNavVariant = 'landing' | 'employer' | 'employee'
-export type EmployerTab = 'dashboard' | 'team' | 'payroll' | 'treasury' | 'insights'
+export type EmployerTab = 'dashboard' | 'team' | 'payroll' | 'treasury' | 'compliance'
 
 interface TopNavProps {
   variant: TopNavVariant
@@ -112,7 +113,7 @@ export default function TopNav({ variant, activeTab = 'dashboard', onTabChange, 
           </div>
         </div>
         <div className="nav-tabs" style={{ display: typeof window !== 'undefined' && window.innerWidth > 900 ? 'flex' : 'none' }}>
-          {(['dashboard', 'team', 'payroll', 'treasury', 'insights'] as const).map((tab) => (
+          {(['dashboard', 'team', 'payroll', 'treasury', 'compliance'] as const).map((tab) => (
             <button
               key={tab}
               className={activeTab === tab ? 'active' : ''}
@@ -135,6 +136,7 @@ export default function TopNav({ variant, activeTab = 'dashboard', onTabChange, 
             </button>
           )}
           {role && <RoleBadge role={role} />}
+          <UmbraStatusPill />
           <div className="avatar-sm">AJ</div>
         </div>
       </nav>
@@ -157,6 +159,7 @@ export default function TopNav({ variant, activeTab = 'dashboard', onTabChange, 
             <span className="addr mono">Connect Wallet</span>
           </button>
         )}
+        <UmbraStatusPill />
         <div className="avatar-sm" title={privyDisplayName || 'Account'}>{avatarInitials}</div>
       </div>
     </nav>

@@ -3,16 +3,18 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { usePrivy } from '@privy-io/react-auth'
 import { PublicKey } from '@solana/web3.js'
 import TopNav, { type EmployerTab } from '../../components/TopNav'
-import PayrollPanel from './PayrollPanel'
 import AddEmployee from './AddEmployee'
 import EmployeeDetail from './EmployeeDetail'
 import AuthGate from './AuthGate'
 import Onboarding from './Onboarding'
-import InsightsPanel from './InsightsPanel'
+import ShieldedTreasuryPanel from './ShieldedTreasuryPanel'
+import ShieldedPayrollPanel from './ShieldedPayrollPanel'
+import ShieldedCompliancePanel from './ShieldedCompliancePanel'
+import ShieldedBalanceCard from '../../components/ShieldedBalanceCard'
 import { useDemoMode } from '../../hooks/useDemoMode'
 import { useRole } from '../../contexts/RoleContext'
 import { useProgram } from '../../hooks/useProgram'
-import { createOrganization, addEmployee, closeOrganization as closeOrganizationOnChain, pauseOrganization as pauseOrganizationOnChain, resumeOrganization as resumeOrganizationOnChain, isOrganizationPaused, setAuditor as setAuditorOnChain, clearAuditor as clearAuditorOnChain, getAuditor, findOrganizationPda, findTreasuryPda } from '../../lib/program'
+import { createOrganization, addEmployee, pauseOrganization as pauseOrganizationOnChain, resumeOrganization as resumeOrganizationOnChain, isOrganizationPaused, setAuditor as setAuditorOnChain, clearAuditor as clearAuditorOnChain, getAuditor, findOrganizationPda, findTreasuryPda } from '../../lib/program'
 import { encryptSalary } from '../../lib/salary_crypto'
 import { AVATAR_COLORS, deriveInitials, truncateAddress } from '../../lib/utils'
 import WalletName from '../../components/WalletName'
@@ -55,7 +57,17 @@ export default function Dashboard() {
   })
 
   const [activeTab, setActiveTab] = useState<EmployerTab>('dashboard')
-  const [payrollPanelOpen, setPayrollPanelOpen] = useState(false)
+
+  // Lets child components (e.g. ShieldedBalanceCard's "Manage →" link) switch
+  // tabs without prop-drilling. The CustomEvent payload is the target tab.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const tab = (e as CustomEvent).detail as EmployerTab
+      if (tab) setActiveTab(tab)
+    }
+    window.addEventListener('zalary:goto-tab', handler)
+    return () => window.removeEventListener('zalary:goto-tab', handler)
+  }, [])
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>(() => {
     if (savedOrgData && savedOrgData.employees.length > 0) {
@@ -167,30 +179,24 @@ export default function Dashboard() {
   }, [program, paused])
 
   const handleResetOrg = useCallback(async () => {
-    if (!program) {
-      setResetError('Wallet not connected')
-      return
-    }
+    // Umbra-shielded orgs have no public on-chain account to close — the org
+    // name + employee list are local state, and the encrypted balance lives
+    // under the user's shielded session. Reset just clears local data so the
+    // user can re-onboard. The shielded session itself is recoverable from
+    // the same wallet's signMessage, so any deposited funds remain claimable
+    // by reconnecting.
     setResetting(true)
     setResetError(null)
     try {
-      const authority = program.provider.publicKey!
-      const [orgPda] = findOrganizationPda(authority)
-      await closeOrganizationOnChain(program, orgPda, USDC_MINT)
       localStorage.removeItem('zalary_onboarded')
       localStorage.removeItem('zalary_org_data')
       localStorage.removeItem('zalary_org_authority')
       window.location.reload()
     } catch (err: any) {
-      const msg = err?.message || 'Reset failed'
-      setResetError(
-        msg.includes('NotEmpty') || msg.includes('non-zero')
-          ? 'Treasury still holds tokens. Withdraw them first, then retry reset.'
-          : msg,
-      )
+      setResetError(err?.message || 'Reset failed')
       setResetting(false)
     }
-  }, [program])
+  }, [])
 
   const handleOnboardingComplete = useCallback(async (data: OrgData) => {
     localStorage.setItem('zalary_onboarded', 'true')
@@ -229,7 +235,6 @@ export default function Dashboard() {
   // filtered to runs whose `organization` field matches this authority's org PDA.
   type PayrollRunRow = { pubkey: string; pda: string; amount: number; timestamp: number; initiator: string }
   const [payrollRuns, setPayrollRuns] = useState<PayrollRunRow[]>([])
-  const [orgTotalDisbursed, setOrgTotalDisbursed] = useState(0)
   useEffect(() => {
     if (!program || !walletPublicKey) return
     let cancelled = false
@@ -238,7 +243,6 @@ export default function Dashboard() {
         const [orgPda] = findOrganizationPda(walletPublicKey)
         const orgAcct = await (program.account as any).organization.fetchNullable(orgPda)
         if (!orgAcct || cancelled) return
-        setOrgTotalDisbursed(Number(orgAcct.totalDisbursed.toString()) / 1_000_000)
         const runs = await (program.account as any).payrollRun.all([
           { memcmp: { offset: 8, bytes: orgPda.toBase58() } }, // first field after discriminator is `organization: Pubkey`
         ])
@@ -276,17 +280,28 @@ export default function Dashboard() {
     return friday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
   })()
   const totalSalaries = employees.reduce((sum, e) => sum + (e.salary || 0), 0)
-  const coverageMonths = totalSalaries > 0 ? (treasuryBalance / totalSalaries).toFixed(1) : '0'
-  const coveragePct = totalSalaries > 0 ? Math.min(100, Math.round((treasuryBalance / (totalSalaries * 6)) * 100)) : 0
+  void totalSalaries
 
-  const openPayrollPanel = useCallback(() => { setPayrollPanelOpen(true) }, [])
-  const closePayrollPanel = useCallback(() => { setPayrollPanelOpen(false) }, [])
   const openAddEmployee = useCallback(() => { setAddEmployeeOpen(true) }, [])
   const closeAddEmployee = useCallback(() => { setAddEmployeeOpen(false) }, [])
 
   const handleEmployeeAdded = useCallback(async (emp: { name: string; wallet: string }) => {
     const colorSet = AVATAR_COLORS[employees.length % AVATAR_COLORS.length]
-    setEmployees(prev => [...prev, { initials: deriveInitials(emp.name), name: emp.name, wallet: truncateAddress(emp.wallet), walletFull: emp.wallet, bg: colorSet.bg, color: colorSet.color, dot: 'green' }])
+    setEmployees(prev => {
+      const next = [...prev, { initials: deriveInitials(emp.name), name: emp.name, wallet: truncateAddress(emp.wallet), walletFull: emp.wallet, bg: colorSet.bg, color: colorSet.color, dot: 'green' }]
+      try {
+        const stored = localStorage.getItem('zalary_org_data')
+        const data = stored ? JSON.parse(stored) : {}
+        data.employees = next.map(e => ({
+          name: e.name,
+          wallet: e.walletFull || e.wallet,
+          salary: e.salary,
+          payFrequency: e.payFrequency,
+        }))
+        localStorage.setItem('zalary_org_data', JSON.stringify(data))
+      } catch { /* ignore */ }
+      return next
+    })
     setAddEmployeeOpen(false)
 
     // Placeholder encrypted salary (64 zero bytes) — updated later via EmployeeDetail
@@ -333,11 +348,17 @@ export default function Dashboard() {
         ])
         if (employeeAccounts.length === 0) return
 
-        const storedNames: Record<string, string> = (() => {
+        // Pull both the display name AND the locally-saved salary off the
+        // org_data blob. Without this merge, the on-chain refresh wipes the
+        // salaries the user just typed (since the legacy Anchor program
+        // doesn't track them) and the payroll panel becomes uncallable.
+        const stored: Record<string, { name: string; salary?: number; payFrequency?: 'weekly' | 'biweekly' | 'monthly' }> = (() => {
           try {
-            const stored = localStorage.getItem('zalary_org_data')
-            const data: OrgData = stored ? JSON.parse(stored) : null
-            return data ? Object.fromEntries(data.employees.map(e => [e.wallet, e.name])) : {}
+            const raw = localStorage.getItem('zalary_org_data')
+            const data: OrgData = raw ? JSON.parse(raw) : null
+            return data
+              ? Object.fromEntries(data.employees.map((e: any) => [e.wallet, { name: e.name, salary: e.salary, payFrequency: e.payFrequency }]))
+              : {}
           } catch {
             return {}
           }
@@ -345,7 +366,8 @@ export default function Dashboard() {
 
         const loadedEmps: Employee[] = employeeAccounts.map((acc: any, i: number) => {
           const walletStr = (acc.account.wallet as PublicKey).toBase58()
-          const name = storedNames[walletStr] || `${walletStr.slice(0, 4)}...${walletStr.slice(-4)}`
+          const entry = stored[walletStr]
+          const name = entry?.name || `${walletStr.slice(0, 4)}...${walletStr.slice(-4)}`
           const initials = name.includes(' ')
             ? name.split(/\s+/).map((w: string) => w[0]?.toUpperCase() || '').join('').slice(0, 2)
             : walletStr.slice(0, 2).toUpperCase()
@@ -360,6 +382,8 @@ export default function Dashboard() {
             color: colorSet.color,
             dot: (statusKey === 'active' ? 'green' : 'yellow') as 'green' | 'yellow',
             encryptedSalary: new Uint8Array(acc.account.encryptedSalary as number[]),
+            salary: entry?.salary,
+            payFrequency: entry?.payFrequency,
           }
         })
         setEmployees(loadedEmps)
@@ -373,26 +397,26 @@ export default function Dashboard() {
     setSelectedEmployee(emp); setDetailPanelOpen(true)
   }, [])
 
-  const handlePayrollComplete = useCallback((totalPaid: number, _txSig: string) => {
-    if (totalPaid <= 0) return
-    setTreasuryBalance(prev => {
-      const newBalance = Math.max(0, prev - totalPaid)
-      // Persist to localStorage
+  const handleSalarySet = useCallback((wallet: string, salary: number, encrypted: Uint8Array, frequency: 'weekly' | 'biweekly' | 'monthly') => {
+    setEmployees(prev => {
+      const next = prev.map(emp => emp.wallet === wallet ? { ...emp, salary, encryptedSalary: encrypted, payFrequency: frequency } : emp)
+      // Persist salary + frequency back into the org_data blob so logout/login
+      // doesn't lose them. The legacy AES "encryptedSalary" Uint8Array is dropped
+      // — Umbra-shielded payroll only needs the wallet + plaintext amount, and
+      // the shielded ciphertext lives in Umbra's mixer tree, not localStorage.
       try {
         const stored = localStorage.getItem('zalary_org_data')
-        if (stored) {
-          const data = JSON.parse(stored)
-          data.treasuryAmount = newBalance
-          localStorage.setItem('zalary_org_data', JSON.stringify(data))
-          setSavedOrgData(data)
-        }
-      } catch {}
-      return newBalance
+        const data = stored ? JSON.parse(stored) : {}
+        data.employees = next.map(e => ({
+          name: e.name,
+          wallet: e.walletFull || e.wallet,
+          salary: e.salary,
+          payFrequency: e.payFrequency,
+        }))
+        localStorage.setItem('zalary_org_data', JSON.stringify(data))
+      } catch { /* ignore */ }
+      return next
     })
-  }, [])
-
-  const handleSalarySet = useCallback((wallet: string, salary: number, encrypted: Uint8Array, frequency: 'weekly' | 'biweekly' | 'monthly') => {
-    setEmployees(prev => prev.map(emp => emp.wallet === wallet ? { ...emp, salary, encryptedSalary: encrypted, payFrequency: frequency } : emp))
     setSelectedEmployee(prev => prev && prev.wallet === wallet ? { ...prev, salary, encryptedSalary: encrypted, payFrequency: frequency } : prev)
   }, [])
 
@@ -466,21 +490,7 @@ export default function Dashboard() {
             <div className="welcome-banner">
               <p>Good morning. You have a payroll run scheduled for <span className="mono-detail">{nextPayDate}</span>.</p>
             </div>
-            <div className="treasury-card">
-              <div className="treasury-header">
-                <span className="label">Treasury Balance</span>
-                <div className="actions">
-                  <button>Fund</button>
-                  {role !== 'admin' && <button>Withdraw</button>}
-                </div>
-              </div>
-              <div className="treasury-amount">${treasuryBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-              <div className="treasury-coverage">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                Treasury covers {coverageMonths} months of payroll
-                <div className="progress-bar"><div className="fill" style={{ width: `${coveragePct}%` }}></div></div>
-              </div>
-            </div>
+            <ShieldedBalanceCard />
             <div className="employee-grid-title">
               <span>Team Members</span>
               <span className="count mono">{employees.length} employees</span>
@@ -560,7 +570,7 @@ export default function Dashboard() {
             <div style={{ marginTop: 12, padding: '16px 20px', border: '1px dashed var(--error)', borderRadius: 'var(--radius)', background: 'rgba(255,107,107,0.04)' }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--error)', marginBottom: 6 }}>Danger zone</div>
               <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.6 }}>
-                Close this organization on-chain and reset local state. The treasury must be empty (0 balance).
+                Clear this org's local state (name, employees, schedule). Your shielded session keypair is recoverable from your wallet, so any encrypted dUSDC remains claimable when you reconnect.
               </p>
               {!confirmReset ? (
                 <button onClick={() => setConfirmReset(true)} style={{ background: 'transparent', color: 'var(--error)', border: '1px solid var(--error)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
@@ -569,7 +579,7 @@ export default function Dashboard() {
               ) : (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={handleResetOrg} disabled={resetting} style={{ background: 'var(--error)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: resetting ? 'wait' : 'pointer', opacity: resetting ? 0.6 : 1 }}>
-                    {resetting ? 'Closing on-chain…' : 'Yes, reset'}
+                    {resetting ? 'Clearing…' : 'Yes, reset'}
                   </button>
                   <button onClick={() => setConfirmReset(false)} disabled={resetting} style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                     Cancel
@@ -585,13 +595,13 @@ export default function Dashboard() {
               <div className="quick-actions">
                 <button
                   className="qa-btn primary-action"
-                  onClick={openPayrollPanel}
+                  onClick={() => setActiveTab('payroll')}
                   disabled={isDemo}
-                  title={isDemo ? 'Tour mode is read-only. Sign in to run payroll.' : undefined}
+                  title={isDemo ? 'Tour mode is read-only.' : 'Open the shielded payroll panel'}
                   style={isDemo ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                  Run Payroll
+                  Run shielded payroll
                 </button>
                 <button
                   className="qa-btn secondary-action"
@@ -704,15 +714,20 @@ export default function Dashboard() {
         {activeTab === 'payroll' && (
         <div className="dashboard-layout">
           <div className="dash-main">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <div>
-                <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Payroll History</h2>
-                <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>All payroll runs for your organization</p>
-              </div>
-              <button className="qa-btn primary-action" onClick={openPayrollPanel} style={{ padding: '10px 20px' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                Run Payroll
-              </button>
+            <div style={{ marginBottom: 24 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Payroll</h2>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Run shielded payroll from your encrypted dUSDC balance.</p>
+            </div>
+            <div style={{ marginBottom: 24 }}>
+              <ShieldedPayrollPanel
+                employees={employees
+                  .filter((e) => e.walletFull)
+                  .map((e) => ({ name: e.name, walletFull: e.walletFull!, salary: e.salary || 0 }))}
+              />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>History</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Legacy on-chain payroll runs (pre-Umbra).</p>
             </div>
             {payrollRuns.length === 0 ? (
               <div style={{ padding: '32px 20px', background: 'var(--bg-card)', border: '1px dashed var(--border)', borderRadius: 'var(--radius)', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
@@ -772,23 +787,9 @@ export default function Dashboard() {
           <div className="dash-main">
             <div style={{ marginBottom: 24 }}>
               <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Treasury</h2>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Manage your organization's USDC vault</p>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Shielded payroll runs from your encrypted balance — amounts never appear on-chain.</p>
             </div>
-            <div className="treasury-card">
-              <div className="treasury-header">
-                <span className="label">Treasury Balance</span>
-                <div className="actions">
-                  <button>Fund</button>
-                  {role !== 'admin' && <button>Withdraw</button>}
-                </div>
-              </div>
-              <div className="treasury-amount">${treasuryBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-              <div className="treasury-coverage">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                Treasury covers {coverageMonths} months of payroll
-                <div className="progress-bar"><div className="fill" style={{ width: `${coveragePct}%` }}></div></div>
-              </div>
-            </div>
+            <ShieldedTreasuryPanel />
             <div style={{ marginTop: 24 }}>
               <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Transaction History</h3>
               {payrollRuns.length === 0 ? (
@@ -815,19 +816,19 @@ export default function Dashboard() {
           </div>
           <div className="dash-side">
             <div className="side-section">
-              <h3>Vault Details</h3>
+              <h3>Network</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Network</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Cluster</span>
                   <span>Solana Devnet</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Token</span>
-                  <span className="mono">USDC</span>
+                  <span className="mono">dUSDC</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Total Disbursed</span>
-                  <span className="mono">${orgTotalDisbursed.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Privacy layer</span>
+                  <span className="mono">Umbra</span>
                 </div>
               </div>
             </div>
@@ -849,19 +850,22 @@ export default function Dashboard() {
         </div>
         )}
 
-        {activeTab === 'insights' && (
-        <div style={{ padding: '0 20px', maxWidth: 960, margin: '0 auto' }}>
-          <div style={{ marginBottom: 24 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Insights</h2>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Treasury activity, cadence, and funder graph. No salary plaintext.</p>
+        {activeTab === 'compliance' && (
+        <div className="dashboard-layout">
+          <div className="dash-main">
+            <div style={{ marginBottom: 24 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Compliance</h2>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Give a specific auditor selective read access to your shielded activity. Revocable, on-chain.</p>
+            </div>
+            <ShieldedCompliancePanel />
           </div>
-          <InsightsPanel authority={walletPublicKey ?? null} />
         </div>
         )}
 
       </main>
 
-      <PayrollPanel open={payrollPanelOpen} onClose={closePayrollPanel} employees={employees} onPayrollComplete={handlePayrollComplete} />
+      {/* Legacy on-chain PayrollPanel removed — payroll now runs through the
+          shielded ShieldedPayrollPanel on the Payroll tab. */}
       <AddEmployee open={addEmployeeOpen} onClose={closeAddEmployee} onEmployeeAdded={handleEmployeeAdded} />
       <EmployeeDetail
         open={detailPanelOpen}
@@ -869,7 +873,21 @@ export default function Dashboard() {
         employee={selectedEmployee}
         onSalarySet={handleSalarySet}
         onRemove={(wallet) => {
-          setEmployees(prev => prev.filter(e => e.wallet !== wallet))
+          setEmployees(prev => {
+            const next = prev.filter(e => e.wallet !== wallet)
+            try {
+              const stored = localStorage.getItem('zalary_org_data')
+              const data = stored ? JSON.parse(stored) : {}
+              data.employees = next.map(e => ({
+                name: e.name,
+                wallet: e.walletFull || e.wallet,
+                salary: e.salary,
+                payFrequency: e.payFrequency,
+              }))
+              localStorage.setItem('zalary_org_data', JSON.stringify(data))
+            } catch { /* ignore */ }
+            return next
+          })
           setDetailPanelOpen(false)
           setSelectedEmployee(null)
         }}

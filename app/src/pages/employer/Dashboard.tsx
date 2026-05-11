@@ -17,6 +17,8 @@ import { useProgram } from '../../hooks/useProgram'
 import { createOrganization, addEmployee, pauseOrganization as pauseOrganizationOnChain, resumeOrganization as resumeOrganizationOnChain, isOrganizationPaused, setAuditor as setAuditorOnChain, clearAuditor as clearAuditorOnChain, getAuditor, findOrganizationPda, findTreasuryPda } from '../../lib/program'
 import { encryptSalary } from '../../lib/salary_crypto'
 import { AVATAR_COLORS, deriveInitials, truncateAddress } from '../../lib/utils'
+import { scanJoinTxs, buildInviteUrl } from '../../lib/payroll-invites'
+import { readPayrollHistory, readTreasuryHistory, HISTORY_EVENT, type PayrollEntry, type TreasuryEntry } from '../../lib/history'
 import WalletName from '../../components/WalletName'
 import type { Employee } from './EmployeeDetail'
 
@@ -45,16 +47,14 @@ export default function Dashboard() {
   const { ready, authenticated } = usePrivy()
   const isLoggedIn = connected || (ready && authenticated)
 
-  // Onboarding state (persisted in localStorage)
-  const [onboardingComplete, setOnboardingComplete] = useState(
-    () => localStorage.getItem('zalary_onboarded') === 'true'
-  )
-  const [savedOrgData, setSavedOrgData] = useState<OrgData | null>(() => {
-    try {
-      const stored = localStorage.getItem('zalary_org_data')
-      return stored ? JSON.parse(stored) : null
-    } catch { return null }
-  })
+  // Onboarding state — scoped per wallet so switching accounts shows a fresh
+  // onboarding flow instead of leaking the previous wallet's org data.
+  const orgScope = walletPublicKey ? walletPublicKey.toBase58() : null
+  const onboardedKey = orgScope ? `zalary_onboarded:${orgScope}` : null
+  const orgDataKey = orgScope ? `zalary_org_data:${orgScope}` : null
+  const orgAuthorityKey = orgScope ? `zalary_org_authority:${orgScope}` : null
+  const [onboardingComplete, setOnboardingComplete] = useState(false)
+  const [savedOrgData, setSavedOrgData] = useState<OrgData | null>(null)
 
   const [activeTab, setActiveTab] = useState<EmployerTab>('dashboard')
 
@@ -69,15 +69,35 @@ export default function Dashboard() {
     return () => window.removeEventListener('zalary:goto-tab', handler)
   }, [])
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false)
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    if (savedOrgData && savedOrgData.employees.length > 0) {
-      return savedOrgData.employees.map((emp, i) => {
+  const [employees, setEmployees] = useState<Employee[]>(DEFAULT_EMPLOYEES)
+
+  // Rehydrate scoped state whenever the wallet identity changes. Without this,
+  // localStorage was global and a second wallet would inherit the first wallet's
+  // onboarding flag + roster.
+  useEffect(() => {
+    if (!onboardedKey || !orgDataKey) {
+      setOnboardingComplete(false)
+      setSavedOrgData(null)
+      setEmployees(DEFAULT_EMPLOYEES)
+      return
+    }
+    const flag = localStorage.getItem(onboardedKey) === 'true'
+    setOnboardingComplete(flag)
+    let data: OrgData | null = null
+    try {
+      const raw = localStorage.getItem(orgDataKey)
+      data = raw ? JSON.parse(raw) as OrgData : null
+    } catch { data = null }
+    setSavedOrgData(data)
+    if (data && data.employees.length > 0) {
+      setEmployees(data.employees.map((emp, i) => {
         const colorSet = AVATAR_COLORS[i % AVATAR_COLORS.length]
         return { initials: deriveInitials(emp.name), name: emp.name, wallet: truncateAddress(emp.wallet), walletFull: emp.wallet, bg: colorSet.bg, color: colorSet.color, dot: 'green' as const, salary: emp.salary }
-      })
+      }))
+    } else {
+      setEmployees(DEFAULT_EMPLOYEES)
     }
-    return DEFAULT_EMPLOYEES
-  })
+  }, [onboardedKey, orgDataKey])
   const [showCreateOrg, setShowCreateOrg] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
   const [detailPanelOpen, setDetailPanelOpen] = useState(false)
@@ -114,6 +134,61 @@ export default function Dashboard() {
       }
     })
   }, [program, walletPublicKey])
+
+  // Poll for join-memo txs landing on our wallet. Each one is a contractor
+  // self-announcing their shielded session pubkey. Merge into the roster.
+  useEffect(() => {
+    if (!walletPublicKey || !onboardingComplete) return
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const joins = await scanJoinTxs(connection, walletPublicKey, 20)
+        if (cancelled) return
+        setEmployees(prev => {
+          const byKey = new Map<string, Employee>()
+          for (const e of prev) byKey.set(e.walletFull || e.wallet, e)
+          let mutated = false
+          for (const j of joins) {
+            if (byKey.has(j.sessionPubkey)) continue
+            const colorSet = AVATAR_COLORS[byKey.size % AVATAR_COLORS.length]
+            byKey.set(j.sessionPubkey, {
+              initials: deriveInitials(j.employeeName),
+              name: j.employeeName,
+              wallet: truncateAddress(j.sessionPubkey),
+              walletFull: j.sessionPubkey,
+              bg: colorSet.bg,
+              color: colorSet.color,
+              dot: 'green' as const,
+            })
+            mutated = true
+          }
+          if (!mutated) return prev
+          const next = Array.from(byKey.values())
+          if (orgDataKey) {
+            try {
+              const stored = localStorage.getItem(orgDataKey)
+              if (stored) {
+                const data = JSON.parse(stored) as OrgData
+                data.employees = next.map(e => ({ name: e.name, wallet: e.walletFull || e.wallet, salary: e.salary ?? 0 }))
+                localStorage.setItem(orgDataKey, JSON.stringify(data))
+              }
+            } catch { /* localStorage write-failure non-fatal */ }
+          }
+          return next
+        })
+      } catch (err) {
+        console.warn('[Dashboard] join scan failed', err)
+      }
+    }
+    void poll()
+    const id = window.setInterval(poll, 60000)
+    return () => { cancelled = true; window.clearInterval(id) }
+  }, [connection, walletPublicKey, onboardingComplete])
+
+  const inviteUrl = walletPublicKey
+    ? buildInviteUrl(window.location.origin, walletPublicKey.toBase58(), orgName || savedOrgData?.orgName || 'Zalary')
+    : ''
+  const [inviteCopied, setInviteCopied] = useState(false)
 
   const handleSetAuditor = useCallback(async () => {
     if (!program || !walletPublicKey) return
@@ -188,9 +263,9 @@ export default function Dashboard() {
     setResetting(true)
     setResetError(null)
     try {
-      localStorage.removeItem('zalary_onboarded')
-      localStorage.removeItem('zalary_org_data')
-      localStorage.removeItem('zalary_org_authority')
+      if (onboardedKey) localStorage.removeItem(onboardedKey)
+      if (orgDataKey) localStorage.removeItem(orgDataKey)
+      if (orgAuthorityKey) localStorage.removeItem(orgAuthorityKey)
       window.location.reload()
     } catch (err: any) {
       setResetError(err?.message || 'Reset failed')
@@ -199,9 +274,13 @@ export default function Dashboard() {
   }, [])
 
   const handleOnboardingComplete = useCallback(async (data: OrgData) => {
-    localStorage.setItem('zalary_onboarded', 'true')
-    localStorage.setItem('zalary_org_data', JSON.stringify(data))
-    if (program) localStorage.setItem('zalary_org_authority', program.provider.publicKey!.toBase58())
+    if (!onboardedKey || !orgDataKey) {
+      console.warn('[Dashboard] onboarding finished without a wallet — not persisting')
+      return
+    }
+    localStorage.setItem(onboardedKey, 'true')
+    localStorage.setItem(orgDataKey, JSON.stringify(data))
+    if (program && orgAuthorityKey) localStorage.setItem(orgAuthorityKey, program.provider.publicKey!.toBase58())
     setSavedOrgData(data)
     setOnboardingComplete(true)
     if (data.employees.length > 0) {
@@ -231,38 +310,27 @@ export default function Dashboard() {
   const displayOrgName = savedOrgData?.orgName || undefined
   const [treasuryBalance, setTreasuryBalance] = useState(() => savedOrgData?.treasuryAmount || 0)
 
-  // Real on-chain payroll history fetched via program.account.payrollRun.all,
-  // filtered to runs whose `organization` field matches this authority's org PDA.
-  type PayrollRunRow = { pubkey: string; pda: string; amount: number; timestamp: number; initiator: string }
-  const [payrollRuns, setPayrollRuns] = useState<PayrollRunRow[]>([])
+  // Local history for shielded ops. The legacy on-chain PayrollRun program is
+  // gone; amounts in Umbra live in encrypted UTXOs and aren't publicly indexable.
+  // We record each disbursement / treasury op to localStorage from the panel that
+  // performs it, scoped per wallet.
+  const [payrollRuns, setPayrollRuns] = useState<PayrollEntry[]>([])
+  const [treasuryTxs, setTreasuryTxs] = useState<TreasuryEntry[]>([])
   useEffect(() => {
-    if (!program || !walletPublicKey) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const [orgPda] = findOrganizationPda(walletPublicKey)
-        const orgAcct = await (program.account as any).organization.fetchNullable(orgPda)
-        if (!orgAcct || cancelled) return
-        const runs = await (program.account as any).payrollRun.all([
-          { memcmp: { offset: 8, bytes: orgPda.toBase58() } }, // first field after discriminator is `organization: Pubkey`
-        ])
-        if (cancelled) return
-        const rows: PayrollRunRow[] = runs
-          .map((r: any) => ({
-            pubkey: r.publicKey.toBase58(),
-            pda: r.publicKey.toBase58(),
-            amount: Number(r.account.totalAmount.toString()) / 1_000_000,
-            timestamp: Number(r.account.timestamp.toString()),
-            initiator: r.account.initiator.toBase58(),
-          }))
-          .sort((a: PayrollRunRow, b: PayrollRunRow) => b.timestamp - a.timestamp)
-        setPayrollRuns(rows)
-      } catch (err) {
-        console.warn('Failed to load payroll history:', err)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [program, walletPublicKey])
+    if (!walletPublicKey) {
+      setPayrollRuns([])
+      setTreasuryTxs([])
+      return
+    }
+    const wallet = walletPublicKey.toBase58()
+    const refresh = () => {
+      setPayrollRuns(readPayrollHistory(wallet))
+      setTreasuryTxs(readTreasuryHistory(wallet))
+    }
+    refresh()
+    window.addEventListener(HISTORY_EVENT, refresh)
+    return () => window.removeEventListener(HISTORY_EVENT, refresh)
+  }, [walletPublicKey])
 
   const runsThisMonth = (() => {
     const now = new Date()
@@ -290,7 +358,7 @@ export default function Dashboard() {
     setEmployees(prev => {
       const next = [...prev, { initials: deriveInitials(emp.name), name: emp.name, wallet: truncateAddress(emp.wallet), walletFull: emp.wallet, bg: colorSet.bg, color: colorSet.color, dot: 'green' }]
       try {
-        const stored = localStorage.getItem('zalary_org_data')
+        const stored = localStorage.getItem(orgDataKey ?? 'zalary_org_data')
         const data = stored ? JSON.parse(stored) : {}
         data.employees = next.map(e => ({
           name: e.name,
@@ -298,7 +366,7 @@ export default function Dashboard() {
           salary: e.salary,
           payFrequency: e.payFrequency,
         }))
-        localStorage.setItem('zalary_org_data', JSON.stringify(data))
+        localStorage.setItem(orgDataKey ?? 'zalary_org_data', JSON.stringify(data))
       } catch { /* ignore */ }
       return next
     })
@@ -354,7 +422,7 @@ export default function Dashboard() {
         // doesn't track them) and the payroll panel becomes uncallable.
         const stored: Record<string, { name: string; salary?: number; payFrequency?: 'weekly' | 'biweekly' | 'monthly' }> = (() => {
           try {
-            const raw = localStorage.getItem('zalary_org_data')
+            const raw = localStorage.getItem(orgDataKey ?? 'zalary_org_data')
             const data: OrgData = raw ? JSON.parse(raw) : null
             return data
               ? Object.fromEntries(data.employees.map((e: any) => [e.wallet, { name: e.name, salary: e.salary, payFrequency: e.payFrequency }]))
@@ -405,7 +473,7 @@ export default function Dashboard() {
       // — Umbra-shielded payroll only needs the wallet + plaintext amount, and
       // the shielded ciphertext lives in Umbra's mixer tree, not localStorage.
       try {
-        const stored = localStorage.getItem('zalary_org_data')
+        const stored = localStorage.getItem(orgDataKey ?? 'zalary_org_data')
         const data = stored ? JSON.parse(stored) : {}
         data.employees = next.map(e => ({
           name: e.name,
@@ -413,12 +481,12 @@ export default function Dashboard() {
           salary: e.salary,
           payFrequency: e.payFrequency,
         }))
-        localStorage.setItem('zalary_org_data', JSON.stringify(data))
+        localStorage.setItem(orgDataKey ?? 'zalary_org_data', JSON.stringify(data))
       } catch { /* ignore */ }
       return next
     })
     setSelectedEmployee(prev => prev && prev.wallet === wallet ? { ...prev, salary, encryptedSalary: encrypted, payFrequency: frequency } : prev)
-  }, [])
+  }, [orgDataKey])
 
   // Auth gates (after all hooks)
   if (!isLoggedIn) return <AuthGate onAuth={() => {}} />
@@ -605,6 +673,23 @@ export default function Dashboard() {
                 </button>
                 <button
                   className="qa-btn secondary-action"
+                  onClick={async () => {
+                    if (!inviteUrl) return
+                    try {
+                      await navigator.clipboard.writeText(inviteUrl)
+                      setInviteCopied(true)
+                      setTimeout(() => setInviteCopied(false), 2000)
+                    } catch { /* ignore */ }
+                  }}
+                  disabled={!inviteUrl || isDemo}
+                  title={isDemo ? 'Tour mode is read-only.' : 'Share this link with a contractor. They onboard themselves.'}
+                  style={(!inviteUrl || isDemo) ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007 0l4-4a5 5 0 00-7-7l-1 1"/><path d="M14 11a5 5 0 00-7 0l-4 4a5 5 0 007 7l1-1"/></svg>
+                  {inviteCopied ? 'Link copied' : 'Copy invite link'}
+                </button>
+                <button
+                  className="qa-btn secondary-action"
                   onClick={openAddEmployee}
                   disabled={isDemo}
                   title={isDemo ? 'Tour mode is read-only. Sign in to add employees.' : undefined}
@@ -727,7 +812,7 @@ export default function Dashboard() {
             </div>
             <div style={{ marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>History</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Legacy on-chain payroll runs (pre-Umbra).</p>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Shielded payroll runs. Amounts visible only to you.</p>
             </div>
             {payrollRuns.length === 0 ? (
               <div style={{ padding: '32px 20px', background: 'var(--bg-card)', border: '1px dashed var(--border)', borderRadius: 'var(--radius)', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
@@ -735,17 +820,20 @@ export default function Dashboard() {
               </div>
             ) : payrollRuns.map((run, idx) => {
               const date = new Date(run.timestamp * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              const shortPda = `${run.pda.slice(0, 4)}…${run.pda.slice(-4)}`
+              const shortSig = run.signature ? `${run.signature.slice(0, 4)}…${run.signature.slice(-4)}` : '—'
               return (
-                <div key={run.pubkey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 8 }}>
+                <div key={run.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <span style={{ fontWeight: 600, fontSize: 15 }}>Payroll #{payrollRuns.length - idx}</span>
                     <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{date}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{run.employeeCount} {run.employeeCount === 1 ? 'recipient' : 'recipients'}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <span className="mono" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>${run.amount.toLocaleString()}</span>
-                    <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'rgba(0,184,148,0.12)', color: 'var(--success)', fontWeight: 500 }}>Confirmed</span>
-                    <a href={`https://solscan.io/account/${run.pda}?cluster=devnet`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{shortPda}</a>
+                    <span className="mono" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>${run.totalAmount.toLocaleString()}</span>
+                    <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'rgba(0,184,148,0.12)', color: 'var(--success)', fontWeight: 500 }}>Shielded</span>
+                    {run.signature ? (
+                      <a href={`https://solscan.io/tx/${run.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{shortSig}</a>
+                    ) : <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{shortSig}</span>}
                   </div>
                 </div>
               )
@@ -792,26 +880,49 @@ export default function Dashboard() {
             <ShieldedTreasuryPanel />
             <div style={{ marginTop: 24 }}>
               <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Transaction History</h3>
-              {payrollRuns.length === 0 ? (
+              {(treasuryTxs.length === 0 && payrollRuns.length === 0) ? (
                 <div style={{ padding: '32px 20px', background: 'var(--bg-card)', border: '1px dashed var(--border)', borderRadius: 'var(--radius)', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
                   No transactions yet. Treasury activity will appear here as you fund the vault and run payroll.
                 </div>
-              ) : payrollRuns.map((run) => {
-                const date = new Date(run.timestamp * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                const shortPda = `${run.pda.slice(0, 4)}…${run.pda.slice(-4)}`
-                return (
-                  <div key={run.pubkey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <span style={{ fontWeight: 500, fontSize: 14 }}>Payroll</span>
-                      <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{date}</span>
+              ) : (() => {
+                type Row = { id: string; timestamp: number; label: string; amount: number; sign: '−' | '+'; signature: string | null }
+                const rows: Row[] = [
+                  ...treasuryTxs.map((t): Row => ({
+                    id: t.id,
+                    timestamp: t.timestamp,
+                    label: t.kind === 'deposit' ? 'Shield deposit' : t.kind === 'withdraw' ? 'Unshield' : 'Faucet',
+                    amount: t.amount,
+                    sign: t.kind === 'withdraw' ? '−' : '+',
+                    signature: t.signature,
+                  })),
+                  ...payrollRuns.map((r): Row => ({
+                    id: r.id,
+                    timestamp: r.timestamp,
+                    label: `Payroll · ${r.employeeCount} ${r.employeeCount === 1 ? 'recipient' : 'recipients'}`,
+                    amount: r.totalAmount,
+                    sign: '−',
+                    signature: r.signature,
+                  })),
+                ].sort((a, b) => b.timestamp - a.timestamp)
+                return rows.map((row) => {
+                  const date = new Date(row.timestamp * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  const shortSig = row.signature ? `${row.signature.slice(0, 4)}…${row.signature.slice(-4)}` : '—'
+                  return (
+                    <div key={row.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <span style={{ fontWeight: 500, fontSize: 14 }}>{row.label}</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{date}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: row.sign === '+' ? 'var(--success)' : 'var(--text-primary)' }}>{row.sign}{row.amount.toLocaleString()} dUSDC</span>
+                        {row.signature ? (
+                          <a href={`https://solscan.io/tx/${row.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{shortSig}</a>
+                        ) : <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{shortSig}</span>}
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <span className="mono" style={{ fontSize: 14, fontWeight: 600 }}>−{run.amount.toLocaleString()} USDC</span>
-                      <a href={`https://solscan.io/account/${run.pda}?cluster=devnet`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{shortPda}</a>
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })
+              })()}
             </div>
           </div>
           <div className="dash-side">
@@ -876,7 +987,7 @@ export default function Dashboard() {
           setEmployees(prev => {
             const next = prev.filter(e => e.wallet !== wallet)
             try {
-              const stored = localStorage.getItem('zalary_org_data')
+              const stored = localStorage.getItem(orgDataKey ?? 'zalary_org_data')
               const data = stored ? JSON.parse(stored) : {}
               data.employees = next.map(e => ({
                 name: e.name,
@@ -884,7 +995,7 @@ export default function Dashboard() {
                 salary: e.salary,
                 payFrequency: e.payFrequency,
               }))
-              localStorage.setItem('zalary_org_data', JSON.stringify(data))
+              localStorage.setItem(orgDataKey ?? 'zalary_org_data', JSON.stringify(data))
             } catch { /* ignore */ }
             return next
           })

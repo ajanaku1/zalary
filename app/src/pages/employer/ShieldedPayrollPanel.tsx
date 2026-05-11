@@ -1,7 +1,9 @@
 // Surface 3: Shielded payroll run.
 
 import { useCallback, useMemo, useState } from 'react'
+import { useWallet } from '@solana/wallet-adapter-react'
 import { address } from '@solana/kit'
+import { recordPayroll } from '../../lib/history'
 import {
   getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction,
   getUserAccountQuerierFunction,
@@ -66,6 +68,7 @@ interface Props {
 
 export default function ShieldedPayrollPanel({ employees }: Props) {
   const { client, status, anonymousReady, ensureAnonymous } = useUmbra()
+  const { publicKey: employerWallet } = useWallet()
   const [rows, setRows] = useState<Record<string, RowStatus>>({})
   const [running, setRunning] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'preparing' | 'running' | 'done' | 'error'>('idle')
@@ -88,6 +91,7 @@ export default function ShieldedPayrollPanel({ employees }: Props) {
     setPhase('preparing')
     setError(null)
     setRows({})
+    const rowResults: Array<{ wallet: string; salary: number; sig: string | null }> = []
     try {
       const ok = await ensureAnonymous()
       if (!ok) throw new Error('Anonymous-mode registration failed; cannot create UTXOs.')
@@ -131,12 +135,23 @@ export default function ShieldedPayrollPanel({ employees }: Props) {
             mint,
           })
           setRow(key, { phase: 'done', queueSig: result.queueSignature, callbackSig: result.callbackSignature })
+          rowResults.push({ wallet: emp.walletFull, salary: emp.salary, sig: result.callbackSignature ?? result.queueSignature ?? null })
         } catch (err: any) {
           console.error('[ShieldedPayroll] row failed', emp.walletFull, err)
           setRow(key, { phase: 'error', message: err?.cause?.message ?? err?.message ?? String(err) })
         }
       }
       setPhase('done')
+      if (rowResults.length > 0 && employerWallet) {
+        const total = rowResults.reduce((s, r) => s + r.salary, 0)
+        recordPayroll(employerWallet.toBase58(), {
+          id: `pr-${Date.now()}`,
+          timestamp: Math.floor(Date.now() / 1000),
+          totalAmount: total,
+          employeeCount: rowResults.length,
+          signature: rowResults[0]?.sig ?? null,
+        })
+      }
     } catch (err: any) {
       console.error('[ShieldedPayroll] run failed', err)
       setError(err?.message ?? String(err))
@@ -144,7 +159,7 @@ export default function ShieldedPayrollPanel({ employees }: Props) {
     } finally {
       setRunning(false)
     }
-  }, [client, payable, ensureAnonymous, running])
+  }, [client, payable, ensureAnonymous, running, employerWallet])
 
   if (!client || (status !== 'ready' && status !== 'proving-anonymous')) {
     return (

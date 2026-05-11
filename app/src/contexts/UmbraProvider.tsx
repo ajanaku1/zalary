@@ -37,7 +37,11 @@ import {
 
 type UmbraClient = Awaited<ReturnType<typeof getUmbraClient>>
 
-const MIN_SESSION_FUNDING_LAMPORTS = 0.05 * LAMPORTS_PER_SOL
+// Threshold to require a top-up. Each Solana tx costs ~5,000 lamports, so
+// 0.005 SOL covers ~1,000 txs of headroom. The fund button sends 0.05 SOL,
+// so this check only fires when the session is genuinely empty — not after
+// every single fee deduction.
+const MIN_SESSION_FUNDING_LAMPORTS = 0.005 * LAMPORTS_PER_SOL
 
 export type UmbraStatus =
   | 'idle'

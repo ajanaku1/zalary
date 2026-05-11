@@ -1,15 +1,14 @@
 // Surface 4 + 5 (employee). Read-only shielded inbox.
 //
-// Decision: the live Claim path is disabled. Umbra's BatchMerkleVerifier
-// circuit was rejecting devnet proofs intermittently (tree-state race vs.
-// circuit constraints), and we don't have the time to chase the SDK fix
-// before the Frontier submission. The decryption itself works — the scanner
-// returns the recipient's plaintext amount even though the chain only sees
-// ciphertext — so the inbox demonstrates Umbra's privacy property and
-// nothing else.
+// The live claim path is disabled. Umbra's BatchMerkleVerifier circuit
+// asserts deterministically on every devnet attempt — single-UTXO batches,
+// multi-UTXO batches, and retries all fail at the same template line. The
+// scanner decrypts correctly so the inbox demonstrates Umbra's privacy
+// property, but the receiver-to-encrypted-balance claim transition is
+// upstream-broken on devnet at the time of submission.
 //
 // Withdrawal (encrypted → public) still ships because its tx path is direct
-// and didn't hit the same circuit failure.
+// and doesn't hit the same circuit.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PublicKey } from '@solana/web3.js'

@@ -13,7 +13,8 @@ import {
   getPublicBalanceToEncryptedBalanceDirectDepositorFunction,
 } from '@umbra-privacy/sdk'
 import { useUmbra } from '../../contexts/UmbraProvider'
-import { useConnection } from '@solana/wallet-adapter-react'
+import { useConnection, useWallet } from '@solana/wallet-adapter-react'
+import { recordTreasury } from '../../lib/history'
 import {
   UMBRA_DEMO_MINT,
   UMBRA_DEMO_MINT_DECIMALS,
@@ -54,6 +55,7 @@ function formatAmount(raw: bigint, decimals: number): string {
 
 export default function ShieldedTreasuryPanel() {
   const { client, sessionPubkey, status } = useUmbra()
+  const { publicKey: employerWallet } = useWallet()
   const { connection } = useConnection()
   const [publicBalance, setPublicBalance] = useState<bigint | null>(null)
   const [encryptedBalance, setEncryptedBalance] = useState<bigint | null>(null)
@@ -147,12 +149,21 @@ export default function ShieldedTreasuryPanel() {
       setSignatures({ queue: r?.queueSignature, callback: r?.callbackSignature })
       setPhase('done')
       setRefreshTick((t) => t + 1)
+      if (employerWallet) {
+        recordTreasury(employerWallet.toBase58(), {
+          id: `tr-${Date.now()}`,
+          timestamp: Math.floor(Date.now() / 1000),
+          kind: 'deposit',
+          amount: parsed,
+          signature: r?.callbackSignature ?? r?.queueSignature ?? null,
+        })
+      }
     } catch (err: any) {
       console.error('[ShieldedTreasury] deposit failed', err)
       setError(err?.cause?.message ?? err?.message ?? String(err))
       setPhase('error')
     }
-  }, [amount, client, sessionPubkey, publicBalance])
+  }, [amount, client, sessionPubkey, publicBalance, employerWallet])
 
   if (status !== 'ready' && status !== 'proving-anonymous') {
     return (

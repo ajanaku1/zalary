@@ -3,7 +3,7 @@
 **Builder:** Bambam (Lagos)
 **Repo:** github.com/[your handle]/Zalary
 **Demo:** runs at `localhost:5173` after `cd app && npm install && npm run dev`. Vercel build available at zalary.vercel.app.
-**Devnet program:** legacy Anchor org program at `FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH`; the privacy layer is Umbra's Arcium MXE program at `DSuKkyqGVGgo4QtPABfxKJKygUDACbUhirnuv63mEpAJ`.
+**Devnet program:** org registry at `FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH`; the privacy layer is Umbra's Arcium MXE program at `DSuKkyqGVGgo4QtPABfxKJKygUDACbUhirnuv63mEpAJ`.
 
 ---
 
@@ -45,10 +45,11 @@ I committed to "deep integration = 3+ surfaces" as a Frontier judging floor. Six
 - Surface 3 issues real receiver-claimable UTXOs and the txs land on devnet. Recipient sees them in their inbox scan.
 - Surface 4's scan returns the correct decrypted amount.
 - Surface 5 unshields end-to-end.
+- **Self-service contractor onboarding via invite link.** The employer never asks for a wallet address. After creating their org, they share `/employee/join?org=<employer-wallet>&name=<org>`. The contractor opens it, finishes their own Umbra session registration, then signs a single tx that pings the employer's wallet with a memo carrying `{org, name, sessionPubkey}`. The dashboard polls `getSignaturesForAddress` on the employer wallet every 30 seconds, decodes any join memos, and the roster fills in. No backend. No address sharing. The chain provides the channel. See `lib/payroll-invites.ts`, `pages/employee/JoinOrg.tsx`, and the dashboard polling effect.
 
 ## What's stubbed
 
-- **Live claim in Surface 4 is disabled in the build.** Umbra's `BatchMerkleVerifier_73` circuit was rejecting devnet proofs intermittently. The UI surfaces the decrypted UTXO amount (which proves the recipient can read what was sent) and shows a footnote explaining the claim button is intentionally absent for this build. The decryption itself works; the proof submission is the broken piece. Mainnet may not hit the same race.
+- **Live claim in Surface 4 is disabled in the build.** Umbra's `BatchMerkleVerifier_73` template asserts deterministically on devnet for every claim attempt — single-leaf, multi-leaf, and retried. The decryption itself works; the proof-witness pipeline is the broken piece. Mainnet may not hit the same issue.
 - **Auditor re-encryption viewer** is not built. Surface 6 issues and revokes grants but the `/auditor` route that would re-encrypt and decrypt granted ciphertexts is the obvious next step.
 - **Privy embedded wallets** can't drive the shielded session yet. The `IUmbraSigner` bridge expects a wallet-standard adapter; Privy needs a custom signer. Phantom and Backpack work fine.
 
@@ -112,7 +113,7 @@ The shielded session keypair is recoverable from your main wallet's signature, s
 
 Three weeks to mainnet. The order of operations:
 
-1. Fix the BatchMerkleVerifier race so live claim ships. Either by retrying with a fresh Merkle proof at submission time, or by waiting for Umbra mainnet which may not hit the same devnet flake.
+1. Fix the BatchMerkleVerifier assertion so live claim ships. Either by waiting for Umbra mainnet (devnet may not be representative) or by getting access to the SDK source to debug the leaf-hash / Merkle-path mismatch directly.
 2. Build the auditor re-encryption viewer at `/auditor`. The SDK has `getSharedCiphertextReencryptorForUserGrantFunction` ready; it just needs the UI.
 3. Bridge Privy embedded wallets into the shielded session so email-only employees can receive shielded payroll without installing Phantom.
 4. Wire ConfidentialTransfer auditor keys for the off-ramp partner who needs a fiat-amount audit trail. This is the "tax authority sees totals, nobody sees individual payments" pattern.

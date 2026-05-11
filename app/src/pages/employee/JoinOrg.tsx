@@ -1,21 +1,33 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
-import { Transaction, SystemProgram } from '@solana/web3.js'
-import { pollConfirm } from '../../lib/program'
+import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { useUmbra } from '../../contexts/UmbraProvider'
+import { buildJoinTx } from '../../lib/payroll-invites'
 
-type JoinStep = 'invite' | 'confirm' | 'processing' | 'success' | 'error'
+const FUND_LAMPORTS = 0.05 * LAMPORTS_PER_SOL
+
+type JoinStep = 'invite' | 'awaiting-session' | 'name' | 'processing' | 'success' | 'error'
 
 export default function JoinOrg() {
   const [searchParams] = useSearchParams()
-  const orgName = searchParams.get('org') || 'Unknown Organization'
-  const refCode = searchParams.get('ref')
+  const orgWallet = searchParams.get('org')
+  const orgName = searchParams.get('name') || 'Unknown Organization'
   const [step, setStep] = useState<JoinStep>('invite')
   const [txSignature, setTxSignature] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [employeeName, setEmployeeName] = useState('')
   const { publicKey, sendTransaction, connected } = useWallet()
   const { connection } = useConnection()
+  const { sessionPubkey, status: umbraStatus, error: umbraError, retry: umbraRetry } = useUmbra()
+  const [funding, setFunding] = useState(false)
+  const [fundError, setFundError] = useState<string | null>(null)
+
+  const orgWalletPubkey = useMemo(() => {
+    if (!orgWallet) return null
+    try { return new PublicKey(orgWallet) } catch { return null }
+  }, [orgWallet])
 
   const truncatedAddress = useMemo(() => {
     if (!publicKey) return ''
@@ -23,85 +35,98 @@ export default function JoinOrg() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }, [publicKey])
 
+  const truncatedSession = useMemo(() => {
+    if (!sessionPubkey) return ''
+    return `${sessionPubkey.slice(0, 6)}...${sessionPubkey.slice(-4)}`
+  }, [sessionPubkey])
+
+  // Advance from "invite" → "awaiting-session" once the user clicks Continue.
+  // From "awaiting-session" → "name" once Umbra finishes registration.
+  useEffect(() => {
+    if (step !== 'awaiting-session') return
+    if (umbraStatus === 'ready' && sessionPubkey) setStep('name')
+  }, [step, umbraStatus, sessionPubkey])
+
+  const fundSession = useCallback(async () => {
+    if (!sessionPubkey || !publicKey) return
+    setFunding(true)
+    setFundError(null)
+    try {
+      const tx = new Transaction().add(SystemProgram.transfer({
+        fromPubkey: publicKey,
+        toPubkey: new PublicKey(sessionPubkey),
+        lamports: FUND_LAMPORTS,
+      }))
+      const sig = await sendTransaction(tx, connection)
+      await connection.confirmTransaction(sig, 'confirmed')
+      umbraRetry()
+    } catch (err: any) {
+      setFundError(err?.message ?? String(err))
+    } finally {
+      setFunding(false)
+    }
+  }, [sessionPubkey, publicKey, sendTransaction, connection, umbraRetry])
+
   const handleConfirmJoin = useCallback(async () => {
-    if (!publicKey) return
+    if (!publicKey || !orgWalletPubkey || !sessionPubkey) return
+    if (!employeeName.trim()) {
+      setErrorMsg('Enter your name first.')
+      return
+    }
     setStep('processing')
     setErrorMsg(null)
-
     try {
-      // Send a self-transfer memo transaction as proof of wallet ownership
-      const tx = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: publicKey,
-          toPubkey: publicKey, // self-transfer (0 SOL)
-          lamports: 0,
-        })
-      )
+      const tx = buildJoinTx(publicKey, orgWalletPubkey, decodeURIComponent(orgName), employeeName.trim(), sessionPubkey)
       const sig = await sendTransaction(tx, connection)
-      await pollConfirm(connection, sig)
+      // Best-effort confirm; UI proceeds either way once the RPC accepts the sig
+      try { await connection.confirmTransaction(sig, 'confirmed') } catch { /* RPC race tolerated */ }
       setTxSignature(sig)
       setStep('success')
     } catch (err: unknown) {
-      console.error('Join transaction failed:', err)
+      console.error('[JoinOrg] join failed:', err)
       const message = err instanceof Error ? err.message : 'Transaction failed'
       setErrorMsg(message)
       setStep('error')
     }
-  }, [publicKey, sendTransaction, connection])
+  }, [publicKey, orgWalletPubkey, sessionPubkey, employeeName, orgName, sendTransaction, connection])
 
   const containerStyle: React.CSSProperties = {
     minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
     background: 'var(--bg, #0a0a0f)',
   }
-
   const cardStyle: React.CSSProperties = {
-    maxWidth: 460,
-    width: '100%',
-    padding: 32,
+    maxWidth: 460, width: '100%', padding: 32,
     background: 'var(--bg-card, #16161e)',
     border: '1px solid var(--border, #2a2a3e)',
-    borderRadius: 16,
-    textAlign: 'center',
+    borderRadius: 16, textAlign: 'center',
   }
-
-  const headingStyle: React.CSSProperties = {
-    fontSize: 24,
-    fontWeight: 700,
-    marginBottom: 8,
-    color: 'var(--text-primary, #fff)',
-  }
-
-  const subStyle: React.CSSProperties = {
-    fontSize: 14,
-    color: 'var(--text-secondary, #8a8a9a)',
-    marginBottom: 28,
-    lineHeight: 1.5,
-  }
-
+  const headingStyle: React.CSSProperties = { fontSize: 24, marginBottom: 8, color: 'var(--text-primary, #fff)' }
+  const subStyle: React.CSSProperties = { color: 'var(--text-secondary, #9494a0)', fontSize: 14, marginBottom: 16 }
   const orgBadgeStyle: React.CSSProperties = {
-    display: 'inline-block',
-    padding: '6px 16px',
-    background: 'var(--accent-subtle, rgba(108,92,231,0.12))',
-    color: 'var(--accent, #6c5ce7)',
-    borderRadius: 20,
-    fontSize: 15,
-    fontWeight: 600,
-    marginBottom: 20,
+    display: 'inline-block', padding: '8px 16px',
+    background: 'rgba(108, 92, 231, 0.12)',
+    border: '1px solid rgba(108, 92, 231, 0.3)',
+    borderRadius: 8, color: 'var(--accent, #6c5ce7)',
+    fontWeight: 600, marginBottom: 16,
+  }
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '12px 14px',
+    background: 'var(--bg-elevated, #1e1e2e)',
+    border: '1px solid var(--border)',
+    borderRadius: 10, fontSize: 14, color: 'var(--text-primary)',
+    fontFamily: 'inherit', marginBottom: 16,
   }
 
-  if (!refCode) {
+  if (!orgWallet || !orgWalletPubkey) {
     return (
       <div style={containerStyle}>
         <div style={cardStyle}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>?</div>
-          <h1 style={headingStyle}>Invalid Invite Link</h1>
-          <p style={subStyle}>This invite link is missing required parameters.</p>
+          <h1 style={headingStyle}>Invalid invite link</h1>
+          <p style={subStyle}>This invite is missing the employer wallet, or it's malformed.</p>
           <Link to="/" style={{ color: 'var(--accent, #6c5ce7)', fontSize: 14, textDecoration: 'underline' }}>
-            Go to Zalary Home
+            Go to Zalary home
           </Link>
         </div>
       </div>
@@ -111,30 +136,21 @@ export default function JoinOrg() {
   return (
     <div style={containerStyle}>
       <div style={cardStyle}>
-        {/* Step: Invite / Connect Wallet */}
         {step === 'invite' && (
           <>
-            <div style={{ marginBottom: 20 }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent, #6c5ce7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-                <circle cx="8.5" cy="7" r="4"/>
-                <line x1="20" y1="8" x2="20" y2="14"/>
-                <line x1="23" y1="11" x2="17" y2="11"/>
-              </svg>
-            </div>
-            <h1 style={headingStyle}>You're Invited!</h1>
+            <h1 style={headingStyle}>You're invited</h1>
             <p style={subStyle}>You've been invited to join</p>
             <div style={orgBadgeStyle}>{decodeURIComponent(orgName)}</div>
-            <p style={{ ...subStyle, marginBottom: 32 }}>on Zalary</p>
+            <p style={{ ...subStyle, marginBottom: 32 }}>on Zalary, paid privately in stablecoins.</p>
 
             {connected && publicKey ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-                <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                   Connected as <span className="mono" style={{ color: 'var(--accent)' }}>{truncatedAddress}</span>
                 </p>
                 <button
                   className="qa-btn primary-action"
-                  onClick={() => setStep('confirm')}
+                  onClick={() => setStep('awaiting-session')}
                   style={{ padding: '12px 28px', fontSize: 15, justifyContent: 'center', width: '100%', maxWidth: 280 }}
                 >
                   Continue
@@ -151,55 +167,85 @@ export default function JoinOrg() {
           </>
         )}
 
-        {/* Step: Confirm */}
-        {step === 'confirm' && (
+        {step === 'awaiting-session' && (
           <>
-            <div style={{ marginBottom: 20 }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent, #6c5ce7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              </svg>
-            </div>
-            <h1 style={headingStyle}>Confirm & Join</h1>
-            <p style={subStyle}>
-              You're joining <strong style={{ color: 'var(--text-primary)' }}>{decodeURIComponent(orgName)}</strong> as
-            </p>
-            <div style={{
-              padding: '12px 20px',
-              background: 'var(--bg-elevated, #1e1e2e)',
-              border: '1px solid var(--border)',
-              borderRadius: 10,
-              marginBottom: 24,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 14,
-              color: 'var(--text-secondary)',
-              wordBreak: 'break-all',
-            }}>
-              {publicKey?.toBase58()}
-            </div>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24, lineHeight: 1.5 }}>
-              A zero-cost transaction will be sent to verify your wallet ownership.
-            </p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <button
-                className="qa-btn secondary-action"
-                onClick={() => setStep('invite')}
-                style={{ padding: '12px 24px' }}
-              >
-                Back
-              </button>
-              <button
-                className="qa-btn primary-action"
-                onClick={handleConfirmJoin}
-                style={{ padding: '12px 28px' }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                Confirm & Join
-              </button>
-            </div>
+            {umbraStatus === 'session-underfunded' ? (
+              <>
+                <h1 style={headingStyle}>Top up your shielded session</h1>
+                <p style={subStyle}>
+                  Your private receiving key needs 0.05 SOL on devnet to pay for its own setup tx.
+                  This is a one-time top-up from your main wallet. The session keypair stays in your browser.
+                </p>
+                {sessionPubkey && (
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, wordBreak: 'break-all' }}>
+                    <span className="mono">{sessionPubkey}</span>
+                  </p>
+                )}
+                {fundError && <p style={{ color: 'var(--error)', fontSize: 13, marginBottom: 12 }}>{fundError}</p>}
+                {umbraError && !fundError && <p style={{ color: 'var(--error)', fontSize: 13, marginBottom: 12 }}>{umbraError}</p>}
+                <button
+                  className="qa-btn primary-action"
+                  onClick={fundSession}
+                  disabled={funding}
+                  style={{ padding: '12px 28px', fontSize: 15, width: '100%' }}
+                >
+                  {funding ? 'Sending 0.05 SOL…' : 'Fund session with 0.05 SOL'}
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{
+                    width: 48, height: 48, margin: '0 auto',
+                    border: '3px solid var(--border)',
+                    borderTopColor: 'var(--accent, #6c5ce7)',
+                    borderRadius: '50%', animation: 'join-spin 0.8s linear infinite',
+                  }} />
+                </div>
+                <h1 style={headingStyle}>Generating your shielded session</h1>
+                <p style={subStyle}>
+                  Approve the signature in your wallet. We derive a private receiving key from it.
+                  The chain never sees your main wallet receive payroll.
+                </p>
+                {umbraError && <p style={{ color: 'var(--error)', fontSize: 13, marginBottom: 12 }}>{umbraError}</p>}
+                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Status: <span className="mono">{umbraStatus}</span>
+                </p>
+              </>
+            )}
           </>
         )}
 
-        {/* Step: Processing */}
+        {step === 'name' && (
+          <>
+            <h1 style={headingStyle}>Almost done</h1>
+            <p style={subStyle}>
+              Your employer will see this name in their payroll dashboard. Your wallet stays private.
+            </p>
+            <input
+              style={inputStyle}
+              placeholder="Your name"
+              value={employeeName}
+              onChange={(e) => setEmployeeName(e.target.value)}
+              maxLength={40}
+              autoFocus
+            />
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+              Sending: shielded pubkey <span className="mono">{truncatedSession}</span> · employer{' '}
+              <span className="mono">{orgWalletPubkey.toBase58().slice(0, 6)}…{orgWalletPubkey.toBase58().slice(-4)}</span>
+            </p>
+            {errorMsg && <p style={{ color: 'var(--error)', fontSize: 13, marginBottom: 12 }}>{errorMsg}</p>}
+            <button
+              className="qa-btn primary-action"
+              onClick={handleConfirmJoin}
+              disabled={!employeeName.trim()}
+              style={{ padding: '12px 28px', fontSize: 15, width: '100%' }}
+            >
+              Join payroll
+            </button>
+          </>
+        )}
+
         {step === 'processing' && (
           <>
             <div style={{ marginBottom: 24 }}>
@@ -207,16 +253,14 @@ export default function JoinOrg() {
                 width: 48, height: 48, margin: '0 auto',
                 border: '3px solid var(--border)',
                 borderTopColor: 'var(--accent, #6c5ce7)',
-                borderRadius: '50%',
-                animation: 'join-spin 0.8s linear infinite',
-              }}></div>
+                borderRadius: '50%', animation: 'join-spin 0.8s linear infinite',
+              }} />
             </div>
-            <h1 style={headingStyle}>Joining...</h1>
-            <p style={subStyle}>Signing wallet verification transaction</p>
+            <h1 style={headingStyle}>Sending join announcement…</h1>
+            <p style={subStyle}>A memo tx tells your employer's wallet that you're ready to receive payroll.</p>
           </>
         )}
 
-        {/* Step: Success */}
         {step === 'success' && (
           <>
             <div style={{
@@ -227,24 +271,21 @@ export default function JoinOrg() {
             }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--success, #00b894)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </div>
-            <h1 style={headingStyle}>Welcome!</h1>
+            <h1 style={headingStyle}>You're on the payroll</h1>
             <p style={subStyle}>
-              You've successfully joined <strong style={{ color: 'var(--text-primary)' }}>{decodeURIComponent(orgName)}</strong>
+              Your shielded pubkey is now visible to <strong style={{ color: 'var(--text-primary)' }}>{decodeURIComponent(orgName)}</strong>.
+              Salary lands in your shielded inbox.
             </p>
             {txSignature && (
               <div style={{
-                padding: '10px 16px',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                marginBottom: 20,
-                fontSize: 12,
+                padding: '10px 16px', background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)', borderRadius: 8,
+                marginBottom: 20, fontSize: 12,
               }}>
                 <span style={{ color: 'var(--text-muted)' }}>tx: </span>
                 <a
                   href={`https://solscan.io/tx/${txSignature}?cluster=devnet`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  target="_blank" rel="noopener noreferrer"
                   className="mono"
                   style={{ color: 'var(--accent)', textDecoration: 'underline' }}
                 >
@@ -260,12 +301,11 @@ export default function JoinOrg() {
                 justifyContent: 'center', textDecoration: 'none', width: '100%', maxWidth: 280,
               }}
             >
-              Go to Employee Portal
+              Open my inbox
             </Link>
           </>
         )}
 
-        {/* Step: Error */}
         {step === 'error' && (
           <>
             <div style={{
@@ -276,25 +316,21 @@ export default function JoinOrg() {
             }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--error, #ff6b6b)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </div>
-            <h1 style={headingStyle}>Something Went Wrong</h1>
-            <p style={{ ...subStyle, color: 'var(--error, #ff6b6b)' }}>
-              {errorMsg || 'Transaction failed. Please try again.'}
-            </p>
+            <h1 style={headingStyle}>That didn't go through</h1>
+            <p style={{ ...subStyle, color: 'var(--error, #ff6b6b)' }}>{errorMsg || 'Transaction failed. Try again.'}</p>
             <button
               className="qa-btn primary-action"
-              onClick={() => setStep('confirm')}
+              onClick={() => setStep('name')}
               style={{ padding: '12px 28px', fontSize: 15 }}
             >
-              Try Again
+              Try again
             </button>
           </>
         )}
       </div>
 
       <style>{`
-        @keyframes join-spin {
-          to { transform: rotate(360deg); }
-        }
+        @keyframes join-spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
   )

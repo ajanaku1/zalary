@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { useConnection } from '@solana/wallet-adapter-react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { resolveSolDomain } from '../../lib/sns'
 import { isValidSolanaAddress } from '../../lib/utils'
+import { buildInviteUrl } from '../../lib/payroll-invites'
 
 interface OnboardingProps {
   onComplete: (data: {
@@ -20,7 +21,7 @@ interface EmployeeEntry {
   salary: number
 }
 
-const TOTAL_STEPS = 6
+const TOTAL_STEPS = 5
 
 function getNextPaymentDate(schedule: ScheduleType): string {
   const now = new Date()
@@ -71,9 +72,15 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [confettiDots, setConfettiDots] = useState<Array<{ id: number; left: string; color: string; delay: string; duration: string; size: string }>>([])
 
   // Onboarding no longer touches the legacy on-chain Anchor program. Org name,
-  // employee list, schedule, budget all flow into local state via onComplete.
-  // The Solana connection is still needed for SNS .sol domain resolution.
+  // schedule, budget all flow into local state via onComplete. The roster fills
+  // in later when employees self-join via the invite link.
   const { connection } = useConnection()
+  const { publicKey } = useWallet()
+  const inviteUrl = useMemo(() => {
+    if (!publicKey || !orgName.trim()) return ''
+    return buildInviteUrl(window.location.origin, publicKey.toBase58(), orgName.trim())
+  }, [publicKey, orgName])
+  const [inviteCopied, setInviteCopied] = useState(false)
 
   const isSolDomain = walletInput.trim().endsWith('.sol')
 
@@ -390,7 +397,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             </div>
           )}
 
-          {/* ===================== STEP 3: Add Employees ===================== */}
+          {/* ===================== STEP 3: Invite Link ===================== */}
           {step === 3 && (
             <div>
               <button style={backBtnStyle} onClick={() => goToStep(2)}>
@@ -398,11 +405,75 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 Back
               </button>
               <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px', marginBottom: 8 }}>
-                Add your first team members
+                Invite your team
               </h2>
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>
-                Enter their Solana wallet address or .sol domain. You can always add more later.
+                Send this link to anyone you want to put on payroll. They connect their wallet, generate their own shielded session, and appear in your dashboard once they finish. You never have to ask for a wallet address.
               </p>
+
+              <div style={{
+                padding: '14px 16px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                marginBottom: 16,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                wordBreak: 'break-all',
+                lineHeight: 1.5,
+              }}>
+                {inviteUrl || 'Connect your wallet first to generate the invite.'}
+              </div>
+
+              <button
+                onClick={async () => {
+                  if (!inviteUrl) return
+                  try {
+                    await navigator.clipboard.writeText(inviteUrl)
+                    setInviteCopied(true)
+                    setTimeout(() => setInviteCopied(false), 2000)
+                  } catch { /* ignore */ }
+                }}
+                disabled={!inviteUrl}
+                style={{
+                  ...secondaryBtnStyle,
+                  opacity: !inviteUrl ? 0.5 : 1,
+                  marginBottom: 20,
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                {inviteCopied ? 'Copied!' : 'Copy invite link'}
+              </button>
+
+              <div style={{
+                padding: '12px 14px',
+                background: 'rgba(108,92,231,0.06)',
+                border: '1px dashed rgba(108,92,231,0.3)',
+                borderRadius: 'var(--radius)',
+                marginBottom: 24,
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
+              }}>
+                The link encodes your org name and wallet. When someone joins, their join announcement lands on your wallet's transaction history. Your dashboard scans for those announcements and builds the roster automatically.
+              </div>
+
+              <button onClick={() => goToStep(5)} style={primaryBtnStyle}>
+                Continue
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+              </button>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: 8 }}>
+                You can grab this link again anytime from the dashboard.
+              </p>
+            </div>
+          )}
+
+          {/* DEPRECATED step-3 block kept hidden to avoid touching downstream
+              state references. Replaced by the invite-link UI above. */}
+          {false && (
+            <div>
+              <p style={{ display: 'none' }}>placeholder</p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
                 <div>
@@ -668,7 +739,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           {/* ===================== STEP 5: Payment Schedule ===================== */}
           {step === 5 && (
             <div>
-              <button style={backBtnStyle} onClick={() => goToStep(4)}>
+              <button style={backBtnStyle} onClick={() => goToStep(3)}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                 Back
               </button>

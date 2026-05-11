@@ -1,7 +1,7 @@
 # Zalary — Colosseum Frontier Hackathon Submission
 
 **Builder:** Bambam (Lagos)
-**Repo:** github.com/[your handle]/Zalary
+**Repo:** github.com/ajanaku1/Zalary
 **Demo:** runs at `localhost:5173` after `cd app && npm install && npm run dev`. Vercel build available at zalary.vercel.app.
 **Devnet program:** org registry at `FGBieAeHERm7CJxtXsicQ7NaQ4FqsDixSwmMqKhovfpH`; the privacy layer is Umbra's Arcium MXE program at `DSuKkyqGVGgo4QtPABfxKJKygUDACbUhirnuv63mEpAJ`.
 

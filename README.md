@@ -14,6 +14,10 @@ Confidential payroll for remote teams paying contractors across borders. dUSDC o
 
 ---
 
+## Architecture
+
+![Zalary architecture: employer and employee flows around the Umbra commitment tree, with the SDK call map](./docs/architecture.png)
+
 ## How privacy works in this build
 
 The privacy layer is Umbra, an Arcium-MXE-backed mixer on Solana. Six surfaces ship against the Umbra SDK:

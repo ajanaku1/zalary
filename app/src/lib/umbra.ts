@@ -49,12 +49,11 @@ export const UMBRA_DEMO_MINT = '4oG4sjmopf5MzvTHLE8rpVJ2uyczxfsw2K84SUTpNDx7' //
 export const UMBRA_DEMO_MINT_SYMBOL = 'dUSDC'
 export const UMBRA_DEMO_MINT_DECIMALS = 6
 export const UMBRA_FAUCET_URL = 'https://faucet.umbraprivacy.com/'
-// In dev, route through Vite's proxy to dodge the missing CORS header on
-// faucet.umbraprivacy.com. In production we'd add a serverless edge function
-// or an explicit origin allowlist on the faucet's side.
-const UMBRA_FAUCET_API = import.meta.env.DEV
-  ? '/_umbra-faucet/api/faucet'
-  : 'https://faucet.umbraprivacy.com/api/faucet'
+// Both dev and prod route through the `/_umbra-faucet` proxy path. Vite serves
+// it via `server.proxy` (vite.config.ts); Vercel serves it via the rewrite in
+// `app/vercel.json`. Hitting `faucet.umbraprivacy.com` from the browser fails
+// because that origin doesn't set CORS headers.
+const UMBRA_FAUCET_API = '/_umbra-faucet/api/faucet'
 
 export interface FaucetResult {
   ok: boolean

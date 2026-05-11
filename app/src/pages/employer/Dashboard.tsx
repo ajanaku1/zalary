@@ -295,6 +295,12 @@ export default function Dashboard() {
     localStorage.setItem(onboardedKey, 'true')
     localStorage.setItem(orgDataKey, JSON.stringify(data))
     if (program && orgAuthorityKey) localStorage.setItem(orgAuthorityKey, program.provider.publicKey!.toBase58())
+    // Stamp the reset cursor at onboarding too. Any join memo on this wallet
+    // from before this org was created belongs to a previous org's lifetime
+    // and must not repopulate the new roster.
+    if (orgResetAtKey) {
+      localStorage.setItem(orgResetAtKey, String(Math.floor(Date.now() / 1000)))
+    }
     setSavedOrgData(data)
     setOnboardingComplete(true)
     if (data.employees.length > 0) {
@@ -318,7 +324,7 @@ export default function Dashboard() {
         }
       }
     }
-  }, [program])
+  }, [program, onboardedKey, orgDataKey, orgAuthorityKey, orgResetAtKey])
 
   // ALL hooks must be called before any early return (Rules of Hooks)
   const displayOrgName = savedOrgData?.orgName || undefined

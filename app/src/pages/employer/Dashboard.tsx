@@ -271,7 +271,7 @@ export default function Dashboard() {
       setResetError(err?.message || 'Reset failed')
       setResetting(false)
     }
-  }, [])
+  }, [onboardedKey, orgDataKey, orgAuthorityKey])
 
   const handleOnboardingComplete = useCallback(async (data: OrgData) => {
     if (!onboardedKey || !orgDataKey) {

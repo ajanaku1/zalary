@@ -84,22 +84,30 @@ export async function scanJoinTxs(
   )
   const records: JoinRecord[] = []
   const seen = new Set<string>()
+  const employerB58 = employerWallet.toBase58()
   for (let i = 0; i < results.length; i++) {
     const tx = results[i]
     if (!tx) continue
     const ixs = tx.transaction.message.instructions
     let memoText: string | null = null
     let joiner: string | null = null
+    let destination: string | null = null
     for (const ix of ixs) {
       if ('parsed' in ix && ix.program === 'spl-memo') {
-        // Parsed memo instructions surface the utf8 string as .parsed
         memoText = typeof ix.parsed === 'string' ? ix.parsed : String((ix as any).parsed ?? '')
       }
       if ('parsed' in ix && ix.program === 'system' && (ix.parsed as any)?.type === 'transfer') {
         joiner = (ix.parsed as any)?.info?.source ?? null
+        destination = (ix.parsed as any)?.info?.destination ?? null
       }
     }
-    if (!memoText || !joiner) continue
+    if (!memoText || !joiner || !destination) continue
+    // Only count memos whose transfer destination IS this employer. Otherwise
+    // we'd pick up memos this wallet sent to OTHER orgs (when it joined them
+    // as an employee) and add itself to its own roster.
+    if (destination !== employerB58) continue
+    // And ignore self-sent txs (wallet would be both source and destination).
+    if (joiner === employerB58) continue
     const decoded = decodeJoinMemo(memoText)
     if (!decoded) continue
     if (seen.has(decoded.sessionPubkey)) continue

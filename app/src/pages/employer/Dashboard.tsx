@@ -53,6 +53,10 @@ export default function Dashboard() {
   const onboardedKey = orgScope ? `zalary_onboarded:${orgScope}` : null
   const orgDataKey = orgScope ? `zalary_org_data:${orgScope}` : null
   const orgAuthorityKey = orgScope ? `zalary_org_authority:${orgScope}` : null
+  // Cursor (Unix seconds) used to filter join-memo scans after a reset, since
+  // the join txs themselves live on-chain and can't be deleted. Joins with a
+  // blockTime <= cursor are ignored.
+  const orgResetAtKey = orgScope ? `zalary_org_reset_at:${orgScope}` : null
   const [onboardingComplete, setOnboardingComplete] = useState(false)
   const [savedOrgData, setSavedOrgData] = useState<OrgData | null>(null)
 
@@ -144,11 +148,16 @@ export default function Dashboard() {
       try {
         const joins = await scanJoinTxs(connection, walletPublicKey, 20)
         if (cancelled) return
+        const resetAtRaw = orgResetAtKey ? localStorage.getItem(orgResetAtKey) : null
+        const resetAt = resetAtRaw ? Number(resetAtRaw) : 0
         setEmployees(prev => {
           const byKey = new Map<string, Employee>()
           for (const e of prev) byKey.set(e.walletFull || e.wallet, e)
           let mutated = false
           for (const j of joins) {
+            // Drop join memos that landed before this wallet's last reset.
+            // The on-chain tx can't be deleted; this is the local equivalent.
+            if (resetAt && j.blockTime !== null && j.blockTime <= resetAt) continue
             if (byKey.has(j.sessionPubkey)) continue
             const colorSet = AVATAR_COLORS[byKey.size % AVATAR_COLORS.length]
             byKey.set(j.sessionPubkey, {
@@ -266,12 +275,17 @@ export default function Dashboard() {
       if (onboardedKey) localStorage.removeItem(onboardedKey)
       if (orgDataKey) localStorage.removeItem(orgDataKey)
       if (orgAuthorityKey) localStorage.removeItem(orgAuthorityKey)
+      if (orgResetAtKey) {
+        // Stamp the cursor in seconds so the next org's roster poll ignores
+        // every join memo that was emitted to this wallet before the reset.
+        localStorage.setItem(orgResetAtKey, String(Math.floor(Date.now() / 1000)))
+      }
       window.location.reload()
     } catch (err: any) {
       setResetError(err?.message || 'Reset failed')
       setResetting(false)
     }
-  }, [onboardedKey, orgDataKey, orgAuthorityKey])
+  }, [onboardedKey, orgDataKey, orgAuthorityKey, orgResetAtKey])
 
   const handleOnboardingComplete = useCallback(async (data: OrgData) => {
     if (!onboardedKey || !orgDataKey) {

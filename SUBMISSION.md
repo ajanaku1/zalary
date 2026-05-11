@@ -104,7 +104,6 @@ The shielded session keypair is recoverable from your main wallet's signature, s
 
 - **Umbra ($10K).** Six-surface deep integration on Umbra's SDK; primary track.
 - **SNS Identity ($5K).** Three SNS surfaces shipped (forward resolution, favorite-domain reverse via `WalletName.tsx`, SNS Records v2 picture/twitter/email).
-- **Dune Frontier Data ($6K credit).** Six SQL queries live in `dune/queries/`; setup guide in `dune/ZALARY_DUNE.md`. Dashboard published under my Dune account.
 - **SuperteamNG x Raenest ($10K USDG).** Regional, Lagos contractor ICP. Same product, framed for emerging-market remote payroll.
 
 ---

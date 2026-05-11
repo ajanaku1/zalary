@@ -79,12 +79,11 @@ Zalary/
 │   │       ├── ShieldedTreasuryPanel.tsx    Surface 2: faucet + shield
 │   │       ├── ShieldedPayrollPanel.tsx     Surface 3: payroll disbursement
 │   │       └── ShieldedCompliancePanel.tsx  Surface 6: auditor grants
-└── dune/                        SQL queries for the Dune Frontier Data track
 ```
 
 ## Sponsor tracks
 
-Submitting to Umbra, SNS Identity, Dune Frontier Data, and SuperteamNG x Raenest. Side-track status and what's shipped per track is in [SUBMISSION.md](./SUBMISSION.md).
+Submitting to Umbra, SNS Identity, and SuperteamNG x Raenest. Side-track status and what's shipped per track is in [SUBMISSION.md](./SUBMISSION.md).
 
 ## Privacy contract
 

@@ -4,8 +4,6 @@ Every founder I know in Lagos pays remote contractors through some mix of Binanc
 
 Stablecoin payroll in emerging markets is already happening at scale. It's just done badly. Zalary is the version where privacy is built into the rail, the off-ramp is one tap, and the founder doesn't have to teach their contractor what an ATA is.
 
-![Zalary landing page](docs/images/landing.png)
-
 Confidential payroll for remote teams paying contractors across borders. dUSDC on Solana, salary amounts hidden on-chain via Umbra, fiat off-ramp to local currency in the same app.
 
 **Live demo**: [zalary.vercel.app](https://zalary.vercel.app)

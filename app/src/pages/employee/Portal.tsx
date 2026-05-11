@@ -4,6 +4,7 @@ import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { PublicKey } from '@solana/web3.js'
 import TopNav from '../../components/TopNav'
+import Logo from '../../components/Logo'
 import ShieldedInbox from '../../components/ShieldedInbox'
 import { openMoonPaySell } from '../../lib/moonpay'
 import { verifyWithWorldId, type WorldIdProof } from '../../lib/worldid'
@@ -60,7 +61,7 @@ export default function Portal() {
     return (
       <div className="screen active">
         <nav className="top-nav">
-          <div className="nav-logo">Z<span>.</span>alary</div>
+          <Logo className="nav-logo" size={28} />
         </nav>
         <main>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 64px)', padding: 24, textAlign: 'center' }}>

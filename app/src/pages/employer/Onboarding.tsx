@@ -3,6 +3,7 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { resolveSolDomain } from '../../lib/sns'
 import { isValidSolanaAddress } from '../../lib/utils'
 import { buildInviteUrl } from '../../lib/payroll-invites'
+import Logo from '../../components/Logo'
 
 interface OnboardingProps {
   onComplete: (data: {
@@ -274,7 +275,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   return (
     <div className="screen active" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <nav className="top-nav">
-        <div className="nav-logo">Z<span>.</span>alary</div>
+        <Logo className="nav-logo" size={28} />
       </nav>
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px 40px' }}>

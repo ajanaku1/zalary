@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Zalary">
   <rect width="200" height="200" rx="40" fill="#0c0c0f"/>
   <g fill="#6c5ce7" transform="translate(40, 0)">
-    <rect x="60" y="20" width="7" height="160" rx="2.5"/>
+    <rect x="0" y="20" width="7" height="160" rx="2.5" transform="translate(60, 0)"/>
     <rect x="10" y="48" width="104" height="22" rx="2"/>
     <rect x="10" y="130" width="104" height="22" rx="2"/>
     <polygon points="114,70 114,92 32,152 10,152 10,130 92,70"/>

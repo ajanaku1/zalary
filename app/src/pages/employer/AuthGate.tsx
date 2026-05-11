@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { usePrivy } from '@privy-io/react-auth'
+import Logo from '../../components/Logo'
 
 interface AuthGateProps {
   onAuth: () => void
@@ -27,7 +28,7 @@ export default function AuthGate({ onAuth: _onAuth }: AuthGateProps) {
   return (
     <div className="screen active">
       <nav className="top-nav">
-        <div className="nav-logo">Z<span>.</span>alary</div>
+        <Logo className="nav-logo" size={28} />
       </nav>
       <main>
         <div style={{

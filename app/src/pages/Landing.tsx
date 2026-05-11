@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import TopNav from '../components/TopNav'
+import Logo from '../components/Logo'
 import { isDemoConfigured } from '../hooks/useDemoMode'
 
 export default function Landing() {
@@ -254,7 +255,7 @@ export default function Landing() {
         {/* Footer */}
         <footer className="site-footer">
           <div className="footer-left">
-            <div className="logo-footer">Z<span>.</span>alary</div>
+            <Logo className="logo-footer" size={20} />
             <div className="solana-badge">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/></svg>
               Built on Solana

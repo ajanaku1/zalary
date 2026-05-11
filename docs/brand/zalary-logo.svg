@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200" role="img" aria-label="Zalary">
+  <rect width="720" height="200" fill="#0c0c0f"/>
+  <g fill="#6c5ce7">
+    <!-- vertical $ stroke — extends above and below the Z bars -->
+    <rect x="167" y="20" width="7" height="160" rx="2.5"/>
+    <!-- Z top bar -->
+    <rect x="118" y="48" width="104" height="22" rx="2"/>
+    <!-- Z bottom bar -->
+    <rect x="118" y="130" width="104" height="22" rx="2"/>
+    <!-- Z diagonal stroke -->
+    <polygon points="222,70 222,92 140,152 118,152 118,130 200,70"/>
+  </g>
+  <!-- accent dot, matches the "z.alary" punctuation in the nav -->
+  <circle cx="250" cy="142" r="7.5" fill="#6c5ce7"/>
+  <!-- wordmark -->
+  <text x="276" y="156"
+        font-family="'JetBrains Mono', 'DM Mono', 'SF Mono', ui-monospace, Menlo, monospace"
+        font-weight="700"
+        font-size="104"
+        fill="#eeeeee"
+        letter-spacing="-2">alary</text>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 200" role="img" aria-label="Zalary">
+  <g fill="#6c5ce7">
+    <rect x="67" y="20" width="7" height="160" rx="2.5"/>
+    <rect x="18" y="48" width="104" height="22" rx="2"/>
+    <rect x="18" y="130" width="104" height="22" rx="2"/>
+    <polygon points="122,70 122,92 40,152 18,152 18,130 100,70"/>
+  </g>
+</svg>

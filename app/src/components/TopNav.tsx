@@ -7,6 +7,7 @@ import { usePrivy } from '@privy-io/react-auth'
 import { useRole } from '../contexts/RoleContext'
 import { truncateAddress } from '../lib/utils'
 import UmbraStatusPill from './UmbraStatusPill'
+import Logo from './Logo'
 
 type TopNavVariant = 'landing' | 'employer' | 'employee'
 export type EmployerTab = 'dashboard' | 'team' | 'payroll' | 'treasury' | 'compliance'
@@ -86,7 +87,7 @@ export default function TopNav({ variant, activeTab = 'dashboard', onTabChange, 
   if (variant === 'landing') {
     return (
       <nav className="top-nav">
-        <div className="nav-logo">Z<span>.</span>alary</div>
+        <Logo className="nav-logo" size={28} />
         <div className="nav-links" style={mobileMenuOpen ? { display: 'flex' } : undefined}>
           <a href="#features">Features</a>
           <a href="#how-it-works">How It Works</a>
@@ -106,7 +107,7 @@ export default function TopNav({ variant, activeTab = 'dashboard', onTabChange, 
     return (
       <nav className="top-nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div className="nav-logo" style={{ cursor: 'pointer' }} onClick={() => goTo('/')}>Z<span>.</span>alary</div>
+          <Logo className="nav-logo" size={28} style={{ cursor: 'pointer' }} onClick={() => goTo('/')} />
           <div className="org-dropdown">
             {orgName || 'My Organization'}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -146,7 +147,7 @@ export default function TopNav({ variant, activeTab = 'dashboard', onTabChange, 
   // variant === 'employee'
   return (
     <nav className="top-nav">
-      <div className="nav-logo" style={{ cursor: 'pointer' }} onClick={() => goTo('/')}>Z<span>.</span>alary</div>
+      <Logo className="nav-logo" size={28} style={{ cursor: 'pointer' }} onClick={() => goTo('/')} />
       <div className="nav-right">
         {connected && publicKey ? (
           <div className="wallet-pill" onClick={disconnect} style={{ cursor: 'pointer' }} title="Click to disconnect">

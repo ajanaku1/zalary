@@ -1,90 +1,149 @@
-# Zalary
+# Zalary: confidential payroll on Solana
 
-Every founder I know in Lagos pays remote contractors through some mix of Binance P2P, Wise, and a Telegram DM with a wallet address. Wise eats 1.5% per leg and skips most of the corridors that matter. The crypto version works, but every payment is public on Solscan. Anyone with the treasury address can read off the full payroll, including who got a raise and when.
+Cross-border contractor pay with Token-2022 confidential transfer amounts. Employees cash out to local currency in the same app.
 
-Stablecoin payroll in emerging markets is already happening at scale. It's just done badly. Zalary is the version where privacy is built into the rail, the off-ramp is one tap, and the founder doesn't have to teach their contractor what an ATA is.
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Solana](https://img.shields.io/badge/Solana-Token--2022-9945FF?logo=solana&logoColor=white)](https://solana.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Confidential payroll for remote teams paying contractors across borders. dUSDC on Solana, salary amounts hidden on-chain via Umbra, fiat off-ramp to local currency in the same app.
+![Architecture](docs/architecture.png)
 
-**Live demo**: [zalary.vercel.app](https://zalary.vercel.app)
-**Business plan**: [BUSINESS.md](./BUSINESS.md)
-**Hackathon writeup**: [SUBMISSION.md](./SUBMISSION.md)
-**Privacy contract**: [PRIVACY.md](./PRIVACY.md)
-**Hackathon**: [Colosseum Frontier 2026](https://www.colosseum.org/frontier)
+## Live Demo
 
----
+**[zalary.vercel.app](https://zalary.vercel.app)**
 
-## Architecture
+Open as employer or employee on Solana devnet. Create a confidential mint, deposit, run payroll, then cash out.
 
-![Zalary architecture: employer and employee flows around the Umbra commitment tree, with the SDK call map](./docs/architecture.png)
-
-## How privacy works in this build
-
-The privacy layer is Umbra, an Arcium-MXE-backed mixer on Solana. Six surfaces ship against the Umbra SDK:
-
-1. Shielded session registration tied to the user's main wallet (one signMessage prompt, deterministic seed, no second key to manage)
-2. Public-to-encrypted dUSDC deposit through Umbra's encrypted balance primitive
-3. Receiver-claimable UTXO disbursement, one per employee, no on-chain employer-to-employee link
-4. Employee inbox scan that decrypts incoming UTXOs only the recipient can read
-5. Encrypted-to-public unshielding back into a normal ATA before off-ramp
-6. Selective-disclosure compliance grants to specific auditor wallets, revocable on-chain
-
-Full architecture in [SUBMISSION.md](./SUBMISSION.md).
-
-## Umbra integration map
-
-Every surface above is one SDK function call away from the wallet. Verify without cloning:
-
-| # | Surface | Umbra primitive | File |
-|---|---|---|---|
-| 1 | Session registration | `getUserRegistrationFunction` | `app/src/contexts/UmbraProvider.tsx:120` |
-| 2 | Public → encrypted deposit | `getPublicBalanceToEncryptedBalanceDirectDepositorFunction` | `app/src/pages/employer/ShieldedTreasuryPanel.tsx:140` |
-| 3 | Encrypted → receiver-claimable UTXO | `getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction` | `app/src/pages/employer/ShieldedPayrollPanel.tsx:96` |
-| 4 | Inbox scan + balance decrypt | `getClaimableUtxoScannerFunction`, `getEncryptedBalanceQuerierFunction` | `app/src/components/ShieldedInbox.tsx:166`, `:145` |
-| 5 | Encrypted → public unshield | `getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction` | `app/src/components/ShieldedInbox.tsx:195` |
-| 6 | Compliance grant issuance | `getComplianceGrantIssuerFunction` | `app/src/pages/employer/ShieldedCompliancePanel.tsx:83` |
-
-Session keypair derivation is at `app/src/lib/umbra.ts:130` via `createSignerFromPrivateKeyBytes` over a sub-wallet deterministically derived from one `signMessage` against the user's main wallet. The wallet-standard bridge in `@umbra-privacy/sdk` v4 produced signature-verification failures on devnet, so the sub-wallet pattern is the workaround.
-
-Client construction is at `app/src/contexts/UmbraProvider.tsx:179`, pointed at `utxo-indexer.api-devnet.umbraprivacy.com` and `relayer.api-devnet.umbraprivacy.com`.
+**Docs:** [BUSINESS.md](./BUSINESS.md) · [PRIVACY.md](./PRIVACY.md) · [SUBMISSION.md](./SUBMISSION.md)  
+**Hackathon:** [Colosseum Frontier 2026](https://www.colosseum.org/frontier)
 
 ---
 
-## Running locally
+## What Is Zalary?
+
+Remote teams already pay contractors in stablecoins across Africa, India, and Latin America. Most of that runs through Binance P2P, Wise, or a wallet address in Telegram. Every payment is public on a block explorer.
+
+Zalary is confidential payroll for those teams. Employers send Token-2022 confidential transfers on Solana so **amounts** stay encrypted on-chain. Employees withdraw to a public balance and off-ramp to NGN, INR, BRL, and more via MoonPay.
+
+---
+
+## Features
+
+- **Confidential amounts**: Token-2022 Confidential Transfers (ElGamal + ZK proofs). Transfer amounts are not readable on explorers.
+- **Honest privacy model**: Recipients remain public (native CT property). Mint auditor ElGamal key enables selective disclosure for compliance.
+- **Employer dashboard**: Org roster, treasury deposit, confidential payroll run, compliance auditor key.
+- **Employee portal**: Apply pending balance, withdraw to public, MoonPay cash-out.
+- **Self-serve join**: Invite link with mint param. Join memo on-chain, no backend roster service.
+- **Identity polish**: SNS `.sol` names, World ID nullifier path, Phantom + Privy login.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Privacy | Token-2022 Confidential Transfers, `@solana/zk-sdk` (WASM), ZK ElGamal Proof program |
+| Frontend | React 19, Vite, TypeScript, Tailwind |
+| Wallet | Phantom via wallet-adapter, Privy (secondary) |
+| Chain | Solana devnet, Anchor org registry program |
+| Identity | World ID, SNS (Bonfida) |
+| Off-ramp | MoonPay |
+| RPC | Helius / public devnet |
+| Hosting | Vercel |
+
+---
+
+## How It Works
+
+```
+Employer wallet
+  |
+  +-- create Token-2022 mint (ConfidentialTransferMint + auditor key)
+  +-- derive ElGamal/AES keys (signMessage)
+  +-- mint public cUSDC -> Deposit -> Apply pending
+  +-- confidential Transfer to each employee ATA
+  |
+Employee wallet
+  |
+  +-- Apply pending -> available confidential balance
+  +-- Withdraw -> public ATA -> MoonPay (NGN/INR/BRL/...)
+```
+
+| Surface | Where |
+|---------|--------|
+| CT session / keys | `app/src/contexts/ConfidentialProvider.tsx` |
+| Mint, deposit, apply | `app/src/lib/confidential.ts`, Treasury panel |
+| Payroll transfer | `ShieldedPayrollPanel.tsx` |
+| Employee apply / withdraw | `ShieldedInbox.tsx` |
+| Auditor key | `ShieldedCompliancePanel.tsx` |
+
+---
+
+## Testing the App
+
+1. Install Phantom and switch to **Solana Devnet**. Fund ~0.1 SOL from a faucet.
+2. Open [zalary.vercel.app](https://zalary.vercel.app) (or local app below).
+3. Click **I'm an Employer**, connect wallet, approve `signMessage` for CT keys.
+4. In the nav pill, click **Create CT mint** and wait for **Token-2022 CT: ready**.
+5. **Treasury**: mint demo cUSDC, deposit, apply pending.
+6. Add employees (wallet addresses that have opened Zalary once so their CT ATA is configured).
+7. **Payroll**: run confidential payroll.
+8. As employee: apply pending, withdraw, cash out with MoonPay (sandbox).
+
+Invite links: `/join?org=<employer>&name=<org>&mint=<ct-mint>`.
+
+---
+
+## Running Locally
 
 ```bash
-cd app
+git clone https://github.com/ajanaku1/zalary.git
+cd zalary/app
+cp .env.example .env.local   # fill Helius / Privy / MoonPay as needed
 npm install --legacy-peer-deps
 npm run dev
 ```
 
-You need a Phantom wallet on devnet with ~0.1 SOL. The shielded session funds itself from your main wallet via one click. Test dUSDC comes from Umbra's devnet faucet, also one click inside the app.
+App: `http://localhost:5173`  
+Employer: `/employer` · Employee: `/employee`
 
-App runs at `localhost:5173`. Employer flow at `/employer`, employee at `/employee`.
+---
 
-## Project structure
+## Project Structure
 
 ```
-Zalary/
-├── app/
+zalary/
+├── app/                         # Vite React SPA
 │   ├── src/
-│   │   ├── contexts/UmbraProvider.tsx       Builds the Umbra client + shielded session
-│   │   ├── lib/umbra.ts                     Session derivation, faucet client, devnet endpoints
-│   │   ├── components/
-│   │   │   ├── ShieldedInbox.tsx            Surface 4 + 5: scan + unshield (employee)
-│   │   │   ├── ShieldedBalanceCard.tsx      Dashboard balance summary
-│   │   │   ├── UmbraStatusPill.tsx          Registration state in the top nav
-│   │   │   └── shielded/primitives.tsx      Shared UI primitives
-│   │   └── pages/employer/
-│   │       ├── ShieldedTreasuryPanel.tsx    Surface 2: faucet + shield
-│   │       ├── ShieldedPayrollPanel.tsx     Surface 3: payroll disbursement
-│   │       └── ShieldedCompliancePanel.tsx  Surface 6: auditor grants
+│   │   ├── contexts/
+│   │   │   └── ConfidentialProvider.tsx
+│   │   ├── lib/
+│   │   │   ├── confidential.ts  # Token-2022 CT ops
+│   │   │   ├── kit-wallet.ts
+│   │   │   ├── send-plan.ts
+│   │   │   └── program.ts      # Anchor org registry
+│   │   ├── pages/employer/      # Dashboard, treasury, payroll, compliance
+│   │   ├── pages/employee/      # Portal, join, income history
+│   │   └── components/
+│   └── vercel.json
+├── docs/                        # Architecture diagram, brand assets
+├── BUSINESS.md
+├── PRIVACY.md
+├── SUBMISSION.md
+└── LICENSE
 ```
 
-## Sponsor tracks
+---
 
-Submitting to Umbra, SNS Identity, and SuperteamNG x Raenest. Side-track status and what's shipped per track is in [SUBMISSION.md](./SUBMISSION.md).
+## Privacy Contract
 
-## Privacy contract
+[PRIVACY.md](./PRIVACY.md) defines what may leave the browser. Ciphertext stays on-chain. Decryption keys stay on device. No analytics indexer in the read path.
 
-[PRIVACY.md](./PRIVACY.md) is the line in the sand for what crosses the wire vs. what stays local. No third-party indexer in the read path. Browser-originated calls only, scoped to wallets the user controls.
+Residual leak: Token-2022 CT does not hide recipient addresses. RPC providers see which accounts you query.
+
+---
+
+## License
+
+MIT

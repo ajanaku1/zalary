@@ -72,14 +72,17 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   // Confetti for step 6
   const [confettiDots, setConfettiDots] = useState<Array<{ id: number; left: string; color: string; delay: string; duration: string; size: string }>>([])
 
-  // Onboarding no longer touches the legacy on-chain Anchor program. Org name,
-  // schedule, budget all flow into local state via onComplete. The roster fills
-  // in later when employees self-join via the invite link.
+  // Org name / schedule / budget stay client-side; roster fills via join memos.
+  // Invite links include the Token-2022 confidential mint when one exists.
   const { connection } = useConnection()
   const { publicKey } = useWallet()
   const inviteUrl = useMemo(() => {
     if (!publicKey || !orgName.trim()) return ''
-    return buildInviteUrl(window.location.origin, publicKey.toBase58(), orgName.trim())
+    let mint: string | null = null
+    try {
+      mint = localStorage.getItem(`zalary.ct.mint.${publicKey.toBase58()}`)
+    } catch { /* ignore */ }
+    return buildInviteUrl(window.location.origin, publicKey.toBase58(), orgName.trim(), mint)
   }, [publicKey, orgName])
   const [inviteCopied, setInviteCopied] = useState(false)
 
@@ -123,10 +126,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setOrgError(null)
     setTxSignature(null)
     try {
-      // Umbra-shielded orgs do not require an on-chain org account — payroll
-      // runs disburse from the employer's encrypted balance into per-employee
-      // UTXOs, and the org name + employee list live in localStorage. So
-      // "create org" is now a local-only action, no Anchor tx, no treasury PDA.
+      // Org metadata is local; confidential payroll uses Token-2022 CT mint
+      // created from the nav pill / dashboard (not an Umbra session).
       if (!orgName.trim()) throw new Error('Enter an organization name')
       setTxSignature('local')
       setTimeout(() => goToStep(3), 400)
@@ -167,10 +168,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [fundError, setFundError] = useState<string | null>(null)
 
   const handleFund = useCallback(async () => {
-    // Treasury funding now happens through the shielded session: the user
-    // claims dUSDC from Umbra's faucet (or sends dUSDC to their session ATA)
-    // and shields it from the dashboard. This step is a placeholder that just
-    // records an intended budget; no on-chain tx fires here.
+    // Treasury funding happens after onboarding: create CT mint, mint demo
+    // cUSDC, deposit into confidential balance on the Treasury tab.
     const amount = parseFloat(treasuryAmount)
     if (!amount || amount <= 0) return
     setFunding(true)
@@ -633,11 +632,11 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 Back
               </button>
               <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px', marginBottom: 8 }}>
-                Plan your shielded budget
+                Plan your confidential budget
               </h2>
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
-                Zalary runs payroll from your <strong>shielded session</strong> — an Umbra-encrypted balance only your wallet can decrypt.
-                Set a target monthly budget here; you'll fund the actual shielded balance in the next step from the dashboard.
+                Zalary runs payroll from your <strong>Token-2022 confidential balance</strong> — amounts are ElGamal-encrypted on-chain.
+                Set a target monthly budget here; fund and deposit on the dashboard next.
               </p>
 
               <div style={{
@@ -650,12 +649,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 color: 'var(--text-secondary)',
                 lineHeight: 1.5,
               }}>
-                After onboarding, the dashboard's <strong>Treasury</strong> tab gives you a one-click faucet for devnet dUSDC and a "Shield" button that moves it into your encrypted balance. No legacy on-chain treasury account is created.
+                After onboarding, create a confidential mint from the nav pill, mint demo cUSDC on the <strong>Treasury</strong> tab, then deposit into your confidential available balance before running payroll.
               </div>
 
               <div style={{ marginBottom: 20 }}>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                  Target budget (dUSDC)
+                  Target budget (cUSDC)
                 </label>
                 <div style={{ position: 'relative' }}>
                   <span style={{

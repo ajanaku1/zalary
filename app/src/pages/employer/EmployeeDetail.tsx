@@ -60,10 +60,8 @@ export default function EmployeeDetail({ open, onClose, employee, onSalarySet, o
   }, [open, employee])
 
   const handleEncryptAndSave = useCallback(async () => {
-    // Salary "encryption" used to live here as a placeholder AES-256-GCM blob
-    // before Umbra. With shielded payroll, the only privacy that matters is
-    // the Umbra UTXO ciphertext on-chain — local salary plaintext is fine and
-    // never leaves the browser. So this just persists the amount + frequency.
+    // Roster salary is browser-local. On-chain privacy is Token-2022 CT at
+    // payroll time — this just persists amount + frequency for the run UI.
     if (!employee) return
     const amount = parseFloat(salaryInput)
     if (!amount || amount <= 0) {
@@ -212,7 +210,7 @@ export default function EmployeeDetail({ open, onClose, employee, onSalarySet, o
             {encrypting ? 'Saving…' : 'Save salary'}
           </button>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
-            Salary stays in your browser. The amount is only encrypted on-chain when you run shielded payroll, where it becomes an Umbra UTXO.
+            Salary stays in your browser. Amounts are encrypted on-chain when you run Token-2022 confidential payroll.
           </p>
 
           {/* Remove Employee */}

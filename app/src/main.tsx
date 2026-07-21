@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import PrivyProvider from './contexts/PrivyProvider'
 import WalletProvider from './contexts/WalletProvider'
-import UmbraProvider from './contexts/UmbraProvider'
+import ConfidentialProvider from './contexts/ConfidentialProvider'
 import { RoleProvider } from './contexts/RoleContext'
 import './index.css'
 
@@ -12,13 +12,13 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <PrivyProvider>
       <WalletProvider>
-        <UmbraProvider>
+        <ConfidentialProvider>
           <BrowserRouter>
             <RoleProvider>
               <App />
             </RoleProvider>
           </BrowserRouter>
-        </UmbraProvider>
+        </ConfidentialProvider>
       </WalletProvider>
     </PrivyProvider>
   </StrictMode>,

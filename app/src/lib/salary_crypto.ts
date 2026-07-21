@@ -105,15 +105,7 @@ export async function decryptSalary(encrypted: Uint8Array, recipientPubkey: stri
 
 /**
  * Production privacy path: Token-2022 Confidential Transfers.
- *
- * Solana's native extension. Treasury and employee ATAs become confidential
- * balances using ElGamal commitments + Pedersen commitments. The employer holds
- * the auditor key, which doubles as the compliance / selective-disclosure
- * primitive (tax authority, internal audit). No MPC cluster, no L2, no third
- * party in the trust path.
- *
- * Mint is already configured for it (ConfidentialTransferMint extension enabled,
- * auto-approve mode). Migration is wiring the ConfidentialTransfer::Transfer
- * instruction with ZK proofs generated client-side via @solana/zk-token-sdk.
+ * Live implementation lives in `lib/confidential.ts` + ConfidentialProvider.
+ * This AES helper remains only for the Employee PDA salary-band UI blob.
  */
-export const PRIVACY_LAYER = 'placeholder-pending-token2022-confidential-transfer-migration' as const
+export const PRIVACY_LAYER = 'token-2022-confidential-transfer' as const

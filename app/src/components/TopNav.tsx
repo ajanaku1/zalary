@@ -6,7 +6,7 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { usePrivy } from '@privy-io/react-auth'
 import { useRole } from '../contexts/RoleContext'
 import { truncateAddress } from '../lib/utils'
-import UmbraStatusPill from './UmbraStatusPill'
+import ConfidentialStatusPill from './ConfidentialStatusPill'
 import Logo from './Logo'
 
 type TopNavVariant = 'landing' | 'employer' | 'employee'
@@ -137,7 +137,7 @@ export default function TopNav({ variant, activeTab = 'dashboard', onTabChange, 
             </button>
           )}
           {role && <RoleBadge role={role} />}
-          <UmbraStatusPill />
+          <ConfidentialStatusPill />
           <div className="avatar-sm">AJ</div>
         </div>
       </nav>
@@ -160,7 +160,7 @@ export default function TopNav({ variant, activeTab = 'dashboard', onTabChange, 
             <span className="addr mono">Connect Wallet</span>
           </button>
         )}
-        <UmbraStatusPill />
+        <ConfidentialStatusPill />
         <div className="avatar-sm" title={privyDisplayName || 'Account'}>{avatarInitials}</div>
       </div>
     </nav>

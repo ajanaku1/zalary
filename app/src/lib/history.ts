@@ -1,9 +1,6 @@
-// Local history tracking for shielded payroll runs and treasury operations.
-// The legacy Anchor program kept a public PayrollRun account; with Umbra,
-// the amounts and recipients live in encrypted UTXOs and there's no public
-// equivalent. We record events to localStorage from the panels themselves
-// and read them back in the Dashboard. Per-wallet scoping mirrors the rest
-// of the app's storage model.
+// Local history tracking for confidential payroll runs and treasury ops.
+// Token-2022 CT encrypts amounts on-chain; we still keep a private client-side
+// activity log for the employer dashboard (per-wallet localStorage).
 
 export interface PayrollEntry {
   id: string

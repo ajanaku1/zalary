@@ -26,5 +26,6 @@ npm-debug.log*
 
 # Local
 .claude/
+.Codex/
 .vercel
 remotion/

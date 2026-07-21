@@ -211,7 +211,7 @@ export default function Portal() {
         <div style={{ padding: '0 20px', maxWidth: 760, margin: '48px auto 0', width: '100%' }}>
           <div className="cashout-section">
             <h3>Cash Out</h3>
-            <p className="cashout-desc">After unshielding, convert your public dUSDC to local currency via MoonPay.</p>
+            <p className="cashout-desc">After withdrawing from confidential balance, convert public cUSDC to local currency via MoonPay.</p>
             <div className="currency-chips">
               {['USD', 'EUR', 'NGN', 'INR', 'BRL'].map((currency) => (
                 <button

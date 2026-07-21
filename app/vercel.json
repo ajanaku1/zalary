@@ -1,10 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/_umbra-faucet/:path*",
-      "destination": "https://faucet.umbraprivacy.com/:path*"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

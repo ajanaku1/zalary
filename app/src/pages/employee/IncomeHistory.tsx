@@ -1,16 +1,8 @@
 // Employee activity log. Honors PRIVACY.md.
 //
-// We deliberately do NOT display dollar amounts on this page. Two reasons:
-//   1. Pre-ConfidentialTransfer migration, salary plaintext is a placeholder
-//      we won't pretend is real income data.
-//   2. Post-migration, transfer amounts are ElGamal-encrypted on-chain. The
-//      amount can only be reconstructed by combining a wallet-signed
-//      decryption with the per-tx ciphertext — work that lives on the
-//      employee's device, not on a list page.
-//
-// What this page IS: a privacy-respecting activity log. Every Zalary program
-// tx touching the connected wallet, with the date and signature. That's what
-// the chain is willing to tell us; we don't fabricate the rest.
+// Token-2022 confidential transfer amounts are ElGamal-encrypted on-chain.
+// This page lists program activity (signatures/dates) without inventing
+// plaintext amounts — decrypt confidential balances in the employee portal.
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
@@ -137,10 +129,9 @@ export default function IncomeHistory() {
         <div className="treasury-card" style={{ background: 'rgba(108,92,231,0.06)' }}>
           <h3 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600 }}>Why no dollar amounts here?</h3>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Salary amounts are encrypted on-chain via Token-2022 ConfidentialTransfer.
-            Decrypting them requires your viewing key, which lives only on this device.
-            For the dollar figure, check your wallet balance after a claim — the amount
-            arrives in your USDC account, decrypted by the wallet itself.
+            Salary amounts are encrypted on-chain via Token-2022 Confidential Transfers.
+            Decrypt with your ElGamal/AES keys (derived in-browser from signMessage).
+            Apply pending balance in the portal, then withdraw to public before off-ramp.
           </p>
         </div>
 

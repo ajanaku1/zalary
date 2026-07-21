@@ -2,7 +2,7 @@
 
 ## What we're building
 
-Confidential payroll for remote teams that pay across borders. Employers send USDC on Solana with the amount hidden on-chain via Token-2022 confidential transfers. Employees cash out to their local currency (NGN, KES, BRL, ARS, INR) inside the same app.
+Confidential payroll for remote teams that pay across borders. Employers send USDC on Solana with **amounts** hidden on-chain via Token-2022 confidential transfers (ElGamal + ZK proofs; recipients remain public). Employees cash out to their local currency (NGN, KES, BRL, ARS, INR) inside the same app.
 
 The whole reason this exists is that paying contractors in stablecoins has been a normal practice in emerging markets for years now, just done badly. Most of it runs through Binance P2P chats, Wise loops, or a founder DMing a wallet address on Telegram. Salary is public on every block explorer. Wise eats 1.5% per leg. Deel doesn't support half these corridors. The pieces to fix it shipped quietly on Solana over the last 18 months and nobody has put them together for this audience yet.
 

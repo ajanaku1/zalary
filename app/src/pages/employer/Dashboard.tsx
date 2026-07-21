@@ -195,7 +195,12 @@ export default function Dashboard() {
   }, [connection, walletPublicKey, onboardingComplete])
 
   const inviteUrl = walletPublicKey
-    ? buildInviteUrl(window.location.origin, walletPublicKey.toBase58(), orgName || savedOrgData?.orgName || 'Zalary')
+    ? buildInviteUrl(
+        window.location.origin,
+        walletPublicKey.toBase58(),
+        orgName || savedOrgData?.orgName || 'Zalary',
+        typeof localStorage !== 'undefined' ? localStorage.getItem(`zalary.ct.mint.${walletPublicKey.toBase58()}`) : null,
+      )
     : ''
   const [inviteCopied, setInviteCopied] = useState(false)
 
@@ -263,7 +268,7 @@ export default function Dashboard() {
   }, [program, paused])
 
   const handleResetOrg = useCallback(async () => {
-    // Umbra-shielded orgs have no public on-chain account to close — the org
+    // CT orgs may have no legacy Anchor org account to close — the org
     // name + employee list are local state, and the encrypted balance lives
     // under the user's shielded session. Reset just clears local data so the
     // user can re-onboard. The shielded session itself is recoverable from
@@ -331,7 +336,7 @@ export default function Dashboard() {
   const [treasuryBalance, setTreasuryBalance] = useState(() => savedOrgData?.treasuryAmount || 0)
 
   // Local history for shielded ops. The legacy on-chain PayrollRun program is
-  // gone; amounts in Umbra live in encrypted UTXOs and aren't publicly indexable.
+  // gone; CT amounts are encrypted on-chain and aren't publicly indexable.
   // We record each disbursement / treasury op to localStorage from the panel that
   // performs it, scoped per wallet.
   const [payrollRuns, setPayrollRuns] = useState<PayrollEntry[]>([])
@@ -490,8 +495,7 @@ export default function Dashboard() {
       const next = prev.map(emp => emp.wallet === wallet ? { ...emp, salary, encryptedSalary: encrypted, payFrequency: frequency } : emp)
       // Persist salary + frequency back into the org_data blob so logout/login
       // doesn't lose them. The legacy AES "encryptedSalary" Uint8Array is dropped
-      // — Umbra-shielded payroll only needs the wallet + plaintext amount, and
-      // the shielded ciphertext lives in Umbra's mixer tree, not localStorage.
+      // — CT payroll needs wallet + plaintext amount; ciphertext lives on Token-2022.
       try {
         const stored = localStorage.getItem(orgDataKey ?? 'zalary_org_data')
         const data = stored ? JSON.parse(stored) : {}
@@ -610,7 +614,7 @@ export default function Dashboard() {
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Auditor / viewing key</div>
                 <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                  Designate a third-party wallet (tax authority, internal audit, regulator) for selective-disclosure access. When the Token-2022 ConfidentialTransfer wiring lands, this address is what the mint's auditor key will be set to.
+                  Designate a third-party auditor for selective disclosure. Use the Compliance tab to set the Token-2022 mint auditor ElGamal key (tax authority, internal audit, regulator).
                 </p>
               </div>
               {auditorPubkey ? (
@@ -821,7 +825,7 @@ export default function Dashboard() {
           <div className="dash-main">
             <div style={{ marginBottom: 24 }}>
               <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Payroll</h2>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Run shielded payroll from your encrypted dUSDC balance.</p>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Run confidential payroll via Token-2022 confidential transfers.</p>
             </div>
             <div style={{ marginBottom: 24 }}>
               <ShieldedPayrollPanel
@@ -832,7 +836,7 @@ export default function Dashboard() {
             </div>
             <div style={{ marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>History</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Shielded payroll runs. Amounts visible only to you.</p>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Confidential payroll runs. Amounts encrypted on-chain.</p>
             </div>
             {payrollRuns.length === 0 ? (
               <div style={{ padding: '32px 20px', background: 'var(--bg-card)', border: '1px dashed var(--border)', borderRadius: 'var(--radius)', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
@@ -850,7 +854,7 @@ export default function Dashboard() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <span className="mono" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>${run.totalAmount.toLocaleString()}</span>
-                    <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'rgba(0,184,148,0.12)', color: 'var(--success)', fontWeight: 500 }}>Shielded</span>
+                    <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'rgba(0,184,148,0.12)', color: 'var(--success)', fontWeight: 500 }}>Confidential</span>
                     {run.signature ? (
                       <a href={`https://solscan.io/tx/${run.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{shortSig}</a>
                     ) : <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{shortSig}</span>}
@@ -895,7 +899,7 @@ export default function Dashboard() {
           <div className="dash-main">
             <div style={{ marginBottom: 24 }}>
               <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Treasury</h2>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Shielded payroll runs from your encrypted balance — amounts never appear on-chain.</p>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Deposit into Token-2022 confidential balance — transfer amounts stay encrypted on-chain.</p>
             </div>
             <ShieldedTreasuryPanel />
             <div style={{ marginTop: 24 }}>
@@ -934,7 +938,7 @@ export default function Dashboard() {
                         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{date}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                        <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: row.sign === '+' ? 'var(--success)' : 'var(--text-primary)' }}>{row.sign}{row.amount.toLocaleString()} dUSDC</span>
+                        <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: row.sign === '+' ? 'var(--success)' : 'var(--text-primary)' }}>{row.sign}{row.amount.toLocaleString()} cUSDC</span>
                         {row.signature ? (
                           <a href={`https://solscan.io/tx/${row.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{shortSig}</a>
                         ) : <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{shortSig}</span>}
@@ -955,11 +959,11 @@ export default function Dashboard() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Token</span>
-                  <span className="mono">dUSDC</span>
+                  <span className="mono">cUSDC</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Privacy layer</span>
-                  <span className="mono">Umbra</span>
+                  <span className="mono">Token-2022 CT</span>
                 </div>
               </div>
             </div>
@@ -986,7 +990,7 @@ export default function Dashboard() {
           <div className="dash-main">
             <div style={{ marginBottom: 24 }}>
               <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Compliance</h2>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Give a specific auditor selective read access to your shielded activity. Revocable, on-chain.</p>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Set the Token-2022 mint auditor ElGamal key for selective amount disclosure.</p>
             </div>
             <ShieldedCompliancePanel />
           </div>
@@ -995,8 +999,7 @@ export default function Dashboard() {
 
       </main>
 
-      {/* Legacy on-chain PayrollPanel removed — payroll now runs through the
-          shielded ShieldedPayrollPanel on the Payroll tab. */}
+      {/* Payroll runs through Token-2022 CT ShieldedPayrollPanel. */}
       <AddEmployee open={addEmployeeOpen} onClose={closeAddEmployee} onEmployeeAdded={handleEmployeeAdded} />
       <EmployeeDetail
         open={detailPanelOpen}

@@ -79,7 +79,7 @@ export default function Landing() {
             </div>
             {/* Card 2: Middle - Encrypted Tx */}
             <div className="hero-card">
-              <div className="card-label">Confidential Transfer</div>
+              <div className="card-label">Token-2022 CT</div>
               <div className="encrypted-bar"></div>
               <div className="encrypted-bar" style={{ width: '70%' }}></div>
               <div className="card-detail" style={{ marginTop: 12 }}>
@@ -184,8 +184,8 @@ export default function Landing() {
               <div className="trust-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               </div>
-              <h3>Confidential transfers</h3>
-              <p>Each salary lives in a Token-2022 confidential balance on Solana. The transaction is visible on-chain. The number inside it isn't.</p>
+              <h3>Token-2022 confidential transfers</h3>
+              <p>Each salary moves via Solana Token-2022 Confidential Transfers. Transfer amounts are ElGamal-encrypted on-chain. Recipient addresses stay public — that is the CT privacy model, with optional mint auditor keys for compliance.</p>
             </div>
             <div className="trust-card">
               <div className="trust-icon">
@@ -213,12 +213,14 @@ export default function Landing() {
             {[
               { name: 'Solana', desc: 'L1 Blockchain' },
               { name: 'Token-2022', desc: 'Confidential Transfers' },
+              { name: 'ZK ElGamal', desc: 'Proof Program' },
               { name: 'Privy', desc: 'Auth & Onboarding' },
               { name: 'World ID', desc: 'Proof of Personhood' },
               { name: 'MoonPay', desc: 'Fiat Off-Ramp' },
               { name: 'Phantom', desc: 'Wallet' },
               { name: 'Solana', desc: 'L1 Blockchain' },
               { name: 'Token-2022', desc: 'Confidential Transfers' },
+              { name: 'ZK ElGamal', desc: 'Proof Program' },
               { name: 'Privy', desc: 'Auth & Onboarding' },
               { name: 'World ID', desc: 'Proof of Personhood' },
               { name: 'MoonPay', desc: 'Fiat Off-Ramp' },

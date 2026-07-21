@@ -166,7 +166,15 @@ export function Heading({ title, subtitle, action }: HeadingProps) {
 }
 
 // -------- Inline alert (info/success/warn/error) ----------
-export function Alert({ tone: t, children }: { tone: Tone; children: ReactNode }) {
+export function Alert({
+  tone: t,
+  children,
+  style,
+}: {
+  tone: Tone
+  children: ReactNode
+  style?: CSSProperties
+}) {
   const { fg, bg } = tone[t]
   return (
     <div style={{
@@ -177,6 +185,7 @@ export function Alert({ tone: t, children }: { tone: Tone; children: ReactNode }
       background: bg,
       borderRadius: 'var(--radius)',
       lineHeight: 1.5,
+      ...style,
     }}>
       {children}
     </div>

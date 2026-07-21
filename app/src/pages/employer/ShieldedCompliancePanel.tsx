@@ -1,238 +1,146 @@
-// Surface 6: Hierarchical compliance grant.
-//
-// The differentiator vs. plain shielded-payroll: selective disclosure. An
-// employer can grant a specific auditor (tax authority, internal compliance
-// officer, etc.) the ability to re-encrypt and read a subset of the employer's
-// shielded activity — without revealing the full master viewing key and
-// without weakening anonymity for anyone else.
-//
-// What we ship here: the issuer side. The auditor's re-encryption viewer
-// would be a separate /auditor route; this build only proves the grant is
-// creatable and revocable on-chain.
+// Mint-level auditor ElGamal key (Token-2022 ConfidentialTransferMint).
 
-import { useCallback, useState } from 'react'
-import { address } from '@solana/kit'
-import {
-  getComplianceGrantIssuerFunction,
-  getComplianceGrantRevokerFunction,
-  getUserAccountQuerierFunction,
-} from '@umbra-privacy/sdk'
-import { useUmbra } from '../../contexts/UmbraProvider'
+import { useCallback, useEffect, useState } from 'react'
+import { useConnection, useWallet } from '@solana/wallet-adapter-react'
+import { useConfidential } from '../../contexts/ConfidentialProvider'
+import { getAuditorElgamalPubkey, updateMintAuditor } from '../../lib/confidential'
 import {
   Alert,
   Btn,
   Card,
   Heading,
   MAX_W,
-  StatusLabel,
   sp,
 } from '../../components/shielded/primitives'
 
-interface GrantRecord {
-  auditor: string
-  nonce: string
-  sig: string
-  issuedAt: number
-  revokedSig?: string
-}
-
-const STORAGE_KEY = 'zalary.compliance.grants'
-
-function loadGrants(): GrantRecord[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
-}
-
-function saveGrants(grants: GrantRecord[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(grants)) } catch { /* ignore */ }
-}
-
 export default function ShieldedCompliancePanel() {
-  const { client, sessionPubkey, status } = useUmbra()
+  const { status, mint, sendTransaction } = useConfidential()
+  const { publicKey } = useWallet()
+  const { connection } = useConnection()
   const [auditor, setAuditor] = useState('')
-  const [issuing, setIssuing] = useState(false)
+  const [current, setCurrent] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [grants, setGrants] = useState<GrantRecord[]>(() => loadGrants())
-  const [revokingNonce, setRevokingNonce] = useState<string | null>(null)
+  const [ok, setOk] = useState<string | null>(null)
 
-  const issue = useCallback(async () => {
-    if (!client || !sessionPubkey) return
+  const refresh = useCallback(async () => {
+    if (!mint) {
+      setCurrent(null)
+      return
+    }
+    const pk = await getAuditorElgamalPubkey(mint)
+    setCurrent(pk ?? null)
+  }, [mint])
+
+  useEffect(() => {
+    refresh()
+  }, [refresh, status])
+
+  const issue = async () => {
+    if (!publicKey || !mint) return
     const trimmed = auditor.trim()
-    if (!trimmed) { setError('Enter the auditor wallet address'); return }
-    setIssuing(true)
+    if (!trimmed) {
+      setError('Paste the auditor ElGamal pubkey (base58 address form from their CT setup).')
+      return
+    }
+    setBusy(true)
     setError(null)
+    setOk(null)
     try {
-      const queryUser = getUserAccountQuerierFunction({ client })
-      // Get both X25519 keys — the granter's (us) and the receiver's (auditor).
-      const [me, them]: any[] = await Promise.all([
-        queryUser(address(sessionPubkey)),
-        queryUser(address(trimmed)),
-      ])
-      if (me?.state !== 'exists' || !me?.data?.x25519PublicKey) {
-        throw new Error('Your own Umbra account is not fully registered — wait for the shielded layer pill to be green.')
-      }
-      if (them?.state !== 'exists' || !them?.data?.x25519PublicKey) {
-        throw new Error('Auditor has no Umbra account on-chain. Ask them to open Zalary and complete the shielded layer setup first.')
-      }
-      const granterX25519 = me.data.x25519PublicKey
-      const receiverX25519 = them.data.x25519PublicKey
-      const nonce = BigInt(Date.now()) as any
-
-      const issueFn = getComplianceGrantIssuerFunction({ client })
-      const sig: string = await issueFn(address(trimmed), granterX25519, receiverX25519, nonce)
-
-      const next: GrantRecord[] = [
-        { auditor: trimmed, nonce: nonce.toString(), sig, issuedAt: Date.now() },
-        ...grants,
-      ]
-      setGrants(next)
-      saveGrants(next)
+      const sig = await updateMintAuditor({
+        connection,
+        owner: publicKey,
+        mint,
+        auditorElgamalPubkey: trimmed,
+        sendTransaction,
+      })
+      setOk(sig)
       setAuditor('')
+      await refresh()
     } catch (err: any) {
-      console.error('[Compliance] issue failed', err)
-      setError(err?.cause?.message ?? err?.message ?? String(err))
+      setError(err?.message ?? String(err))
     } finally {
-      setIssuing(false)
+      setBusy(false)
     }
-  }, [auditor, client, sessionPubkey, grants])
+  }
 
-  const revoke = useCallback(async (grant: GrantRecord) => {
-    if (!client || !sessionPubkey) return
-    setRevokingNonce(grant.nonce)
+  const clear = async () => {
+    if (!publicKey || !mint) return
+    setBusy(true)
     setError(null)
     try {
-      const queryUser = getUserAccountQuerierFunction({ client })
-      const [me, them]: any[] = await Promise.all([
-        queryUser(address(sessionPubkey)),
-        queryUser(address(grant.auditor)),
-      ])
-      const granterX25519 = me?.data?.x25519PublicKey
-      const receiverX25519 = them?.data?.x25519PublicKey
-      if (!granterX25519 || !receiverX25519) throw new Error('Could not resolve X25519 keys for revoke')
-
-      const revokeFn = getComplianceGrantRevokerFunction({ client })
-      const sig: string = await revokeFn(
-        address(grant.auditor),
-        granterX25519,
-        receiverX25519,
-        BigInt(grant.nonce) as any,
-      )
-      const next = grants.map((g) => g.nonce === grant.nonce ? { ...g, revokedSig: sig } : g)
-      setGrants(next)
-      saveGrants(next)
+      await updateMintAuditor({
+        connection,
+        owner: publicKey,
+        mint,
+        auditorElgamalPubkey: null,
+        sendTransaction,
+      })
+      await refresh()
     } catch (err: any) {
-      console.error('[Compliance] revoke failed', err)
-      setError(err?.cause?.message ?? err?.message ?? String(err))
+      setError(err?.message ?? String(err))
     } finally {
-      setRevokingNonce(null)
+      setBusy(false)
     }
-  }, [client, sessionPubkey, grants])
+  }
 
-  if (!client || (status !== 'ready' && status !== 'proving-anonymous')) {
+  if (status !== 'ready' || !mint) {
     return (
-      <Card style={{ maxWidth: MAX_W.card }}>
-        <div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-          Compliance grants become available once the shielded layer pill turns green.
-        </div>
-      </Card>
+      <Alert tone="warn">
+        Compliance controls require a Token-2022 confidential mint (create via the nav pill).
+      </Alert>
     )
   }
 
   return (
-    <Card style={{ maxWidth: MAX_W.card }}>
+    <div style={{ maxWidth: MAX_W.card, display: 'grid', gap: sp.lg }}>
       <Heading
-        title="Compliance grants"
-        subtitle="Grant a specific auditor — tax authority, internal compliance, regulator — re-encryption access to your shielded activity. Selective disclosure: only this auditor, only what you granted, revocable at any time."
+        title="Auditor / viewing key"
+        subtitle="Token-2022 Confidential Transfer mints support an optional auditor ElGamal key. The auditor can decrypt transfer amounts without holding employee keys. Clear to remove."
       />
 
-      <div style={{ display: 'flex', gap: sp.sm, marginBottom: sp.lg }}>
+      <Card>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: sp.sm }}>
+          Current auditor ElGamal pubkey
+        </div>
+        <div className="mono" style={{ fontSize: 12, wordBreak: 'break-all', marginBottom: sp.lg }}>
+          {current ?? '— none set —'}
+        </div>
+
+        <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+          New auditor ElGamal pubkey
+        </label>
         <input
-          type="text"
-          placeholder="Auditor wallet address (their session pubkey)"
           value={auditor}
           onChange={(e) => setAuditor(e.target.value)}
-          disabled={issuing}
+          placeholder="Base58 ElGamal pubkey"
           style={{
-            flex: 1,
-            padding: `${sp.sm + 2}px ${sp.md}px`,
-            border: '1px solid var(--border)',
+            width: '100%',
+            padding: '10px 12px',
             borderRadius: 'var(--radius)',
+            border: '1px solid var(--border)',
             background: 'var(--bg-base)',
-            fontSize: 13,
+            color: 'var(--text-primary)',
             fontFamily: 'var(--font-mono)',
+            fontSize: 13,
+            marginBottom: sp.md,
           }}
         />
-        <Btn onClick={issue} disabled={issuing || !auditor.trim()}>
-          {issuing ? 'Issuing…' : 'Issue grant'}
-        </Btn>
-      </div>
-
-      {error && <Alert tone="err">{error}</Alert>}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: sp.sm }}>
-        {grants.length === 0 ? (
-          <div style={{
-            padding: sp.xl,
-            fontSize: 13,
-            color: 'var(--text-muted)',
-            textAlign: 'center',
-            border: '1px dashed var(--border)',
-            borderRadius: 'var(--radius)',
-          }}>
-            No grants issued yet.
-          </div>
-        ) : (
-          grants.map((g) => {
-            const revoked = !!g.revokedSig
-            return (
-              <div key={g.nonce} style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: `${sp.sm + 2}px ${sp.md}px`,
-                background: 'var(--bg-base)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-              }}>
-                <div style={{ minWidth: 0 }}>
-                  <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-                    {g.auditor.slice(0, 8)}…{g.auditor.slice(-6)}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    Issued {new Date(g.issuedAt).toLocaleString()} · nonce {g.nonce.slice(0, 10)}…
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: sp.md }}>
-                  <StatusLabel tone={revoked ? 'muted' : 'ok'}>
-                    {revoked ? 'Revoked' : 'Active'}
-                  </StatusLabel>
-                  <a
-                    href={`https://explorer.solana.com/tx/${g.sig}?cluster=devnet`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mono"
-                    style={{ fontSize: 11, color: 'var(--accent)' }}
-                  >
-                    issue tx ↗
-                  </a>
-                  {!revoked && (
-                    <Btn
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => revoke(g)}
-                      disabled={revokingNonce === g.nonce}
-                    >
-                      {revokingNonce === g.nonce ? 'Revoking…' : 'Revoke'}
-                    </Btn>
-                  )}
-                </div>
-              </div>
-            )
-          })
+        <div style={{ display: 'flex', gap: sp.sm }}>
+          <Btn variant="primary" disabled={busy} onClick={issue}>
+            {busy ? 'Updating…' : 'Set auditor'}
+          </Btn>
+          <Btn variant="ghost" disabled={busy || !current} onClick={clear}>
+            Clear
+          </Btn>
+        </div>
+        {error && <Alert tone="err" style={{ marginTop: sp.md }}>{error}</Alert>}
+        {ok && (
+          <p style={{ fontSize: 12, marginTop: sp.md, color: 'var(--success)' }}>
+            Updated · {ok.slice(0, 12)}…
+          </p>
         )}
-      </div>
-    </Card>
+      </Card>
+    </div>
   )
 }

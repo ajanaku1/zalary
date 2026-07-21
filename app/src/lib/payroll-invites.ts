@@ -125,7 +125,13 @@ export async function scanJoinTxs(
   return records
 }
 
-export function buildInviteUrl(origin: string, employerWallet: string, orgName: string): string {
+export function buildInviteUrl(
+  origin: string,
+  employerWallet: string,
+  orgName: string,
+  mint?: string | null,
+): string {
   const params = new URLSearchParams({ org: employerWallet, name: orgName })
+  if (mint) params.set('mint', mint)
   return `${origin}/join?${params.toString()}`
 }
